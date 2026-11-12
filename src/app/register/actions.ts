@@ -129,6 +129,6 @@ export async function registerCustomer(
   }
 
   redirect(
-    `/check-email?type=customer&email=${encodeURIComponent(email)}`,
+    `/verify-email?type=customer&email=${encodeURIComponent(email)}`,
   );
 }

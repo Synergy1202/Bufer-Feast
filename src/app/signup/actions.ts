@@ -367,6 +367,12 @@ export async function registerVendor(formData: FormData) {
     );
   }
 
+  // Supabase may return an empty identities array for an existing email.
+  // Do not treat that response as a new signup or overwrite existing records.
+  if (authData.user.identities?.length === 0) {
+    throw new Error("An account with this email already exists. Please log in instead.");
+  }
+
   const userId = authData.user.id;
   const admin = adminClient();
 
@@ -448,6 +454,19 @@ export async function registerVendor(formData: FormData) {
       );
     }
 
+    const { data: existingApplication, error: applicationLookupError } = await admin
+      .from("fernami_vendor_applications")
+      .select("user_id")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (applicationLookupError) {
+      throw new Error(`Vendor application could not be checked: ${applicationLookupError.message}`);
+    }
+    if (existingApplication) {
+      throw new Error("A vendor application already exists for this account. Please contact support.");
+    }
+
     const { error: applicationError } = await admin
       .from("fernami_vendor_applications")
       .insert({
@@ -511,6 +530,6 @@ export async function registerVendor(formData: FormData) {
   }
 
   redirect(
-    `/check-email?type=vendor&email=${encodeURIComponent(email)}`,
+    `/verify-email?type=vendor&email=${encodeURIComponent(email)}`,
   );
 }
