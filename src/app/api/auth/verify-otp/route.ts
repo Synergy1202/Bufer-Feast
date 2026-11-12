@@ -18,9 +18,7 @@ export async function POST(request: Request) {
     authRateLimit(request, "verify-otp");
     const { body } = await readJson(request);
     const parsed = otpSchema.safeParse(body);
-    if (!parsed.success) {
-      throw new AuthProblem("Enter a valid email address and six-digit code.", 400, "AUTH_INVALID_INPUT");
-    }
+    if (!parsed.success) throw new AuthProblem("Enter a valid email address and six-digit code.", 400, "AUTH_INVALID_INPUT");
 
     const email = parsed.data.email.toLowerCase();
     const client = await authClient();
@@ -38,13 +36,22 @@ export async function POST(request: Request) {
       .select("id,email,role,status")
       .eq("id", data.user.id)
       .maybeSingle();
-    if (profileError) throw new AuthProblem("Your account profile could not be checked. Please contact support.", 503, "PROFILE_UNAVAILABLE");
+    if (profileError) {
+      console.error("[verify-otp] profile lookup failed", {
+        code: profileError.code,
+        message: profileError.message,
+        details: profileError.details,
+        hint: profileError.hint,
+        userId: data.user.id,
+      });
+      throw new AuthProblem("Your account profile could not be checked. Please contact support.", 503, "PROFILE_UNAVAILABLE");
+    }
 
     let profile = existingProfile;
-    // Recover a customer signup where Auth created the user but the first profile save failed.
-    // The profile is created only after Supabase has verified ownership of this email.
     if (!profile && data.user.email?.toLowerCase() === email && data.user.user_metadata?.role === "customer") {
       const metadata = data.user.user_metadata || {};
+      const latitude = typeof metadata.primary_address_latitude === "number" ? metadata.primary_address_latitude : null;
+      const longitude = typeof metadata.primary_address_longitude === "number" ? metadata.primary_address_longitude : null;
       const { error: recoveryError } = await admin.from("profiles").upsert({
         id: data.user.id,
         email,
@@ -54,6 +61,9 @@ export async function POST(request: Request) {
         status: "pending",
         birthday: typeof metadata.birthday === "string" ? metadata.birthday : null,
         primary_address: typeof metadata.primary_address === "string" ? metadata.primary_address : null,
+        primary_address_latitude: latitude,
+        primary_address_longitude: longitude,
+        primary_address_place_id: typeof metadata.primary_address_place_id === "string" ? metadata.primary_address_place_id : null,
         marketing_opt_in: metadata.marketing_opt_in === true,
       }, { onConflict: "id" });
       if (recoveryError) {
@@ -81,7 +91,16 @@ export async function POST(request: Request) {
           .eq("id", data.user.id)
           .eq("role", "customer")
           .eq("status", "pending");
-        if (updateError) throw new AuthProblem("Your email was verified, but your profile status could not be updated. Please contact support.", 503, "PROFILE_UPDATE_FAILED");
+        if (updateError) {
+          console.error("[verify-otp] customer activation failed", {
+            code: updateError.code,
+            message: updateError.message,
+            details: updateError.details,
+            hint: updateError.hint,
+            userId: data.user.id,
+          });
+          throw new AuthProblem("Your email was verified, but your profile status could not be updated. Please contact support.", 503, "PROFILE_UPDATE_FAILED");
+        }
       }
     } else if (profile.role === "vendor") {
       const { data: application, error: applicationError } = await admin
@@ -93,7 +112,7 @@ export async function POST(request: Request) {
       if (!application || (application.email || "").toLowerCase() !== email) {
         throw new AuthProblem("Your vendor application could not be matched to this verified email.", 403, "VENDOR_APPLICATION_MISMATCH");
       }
-      // Email verification does not approve the application. Its existing review status is preserved.
+      // Verification never approves a vendor. Existing review status is preserved.
     } else {
       throw new AuthProblem("This account type cannot complete public signup verification.", 403, "ACCOUNT_ROLE_INVALID");
     }
