@@ -4,136 +4,89 @@ import { redirect } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import { adminClient } from "@/lib/server/admin";
 
-function getField(formData: FormData, name: string) {
-  const value = formData.get(name);
+export type RegistrationState = { error?: string };
 
+function field(data: FormData, name: string) {
+  const value = data.get(name);
   return typeof value === "string" ? value.trim() : "";
 }
 
-function publicSupabaseClient() {
-  const url =
-    process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    process.env.SUPABASE_URL;
+export async function registerCustomer(previous: RegistrationState, formData: FormData): Promise<RegistrationState> {
+  void previous;
+  const email = field(formData, "email").toLowerCase();
+  const password = field(formData, "password");
+  const firstName = field(formData, "first_name");
+  const lastName = field(formData, "last_name");
+  const phone = field(formData, "phone");
+  const birthday = field(formData, "birthday");
+  const address = field(formData, "primary_address");
+  const marketing = formData.get("marketing_opt_in") === "on" || formData.get("marketing_opt_in") === "true";
 
-  const key =
-    process.env.SUPABASE_PUBLISHABLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!email || !password || !firstName || !lastName || !phone) return { error: "Please complete all required account fields." };
+  if (!address) return { error: "Please enter your primary delivery address." };
+  if (password.length < 8) return { error: "Password must contain at least 8 characters." };
 
-  if (!url) {
-    throw new Error("Missing Supabase URL.");
-  }
-
-  if (!key) {
-    throw new Error("Missing Supabase publishable key.");
-  }
-
-  return createClient(url, key, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
-}
-
-function siteUrl() {
-  return (
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    "http://localhost:3000"
-  );
-}
-
-export async function registerCustomer(
-  formData: FormData,
-): Promise<void> {
-  const email = getField(formData, "email").toLowerCase();
-  const password = getField(formData, "password");
-
-  const firstName = getField(formData, "first_name");
-  const lastName = getField(formData, "last_name");
-  const phone = getField(formData, "phone");
-
-  const birthday = getField(formData, "birthday");
-  const referralCode = getField(formData, "referral_code");
-  const primaryAddress = getField(
-    formData,
-    "primary_address",
-  );
-
-  const latitudeRaw = getField(formData, "primary_address_latitude");
-  const longitudeRaw = getField(formData, "primary_address_longitude");
-  const latitude = latitudeRaw && Number.isFinite(Number(latitudeRaw)) && Math.abs(Number(latitudeRaw)) <= 90 ? Number(latitudeRaw) : null;
-  const longitude = longitudeRaw && Number.isFinite(Number(longitudeRaw)) && Math.abs(Number(longitudeRaw)) <= 180 ? Number(longitudeRaw) : null;
-  const placeId = getField(formData, "primary_address_place_id");
-
-  const marketingOptIn =
-    formData.get("marketing_opt_in") === "on" ||
-    formData.get("marketing_opt_in") === "true";
-
-  if (!email || !password || !firstName || !lastName || !phone) {
-    throw new Error(
-      "Please complete all required account fields.",
-    );
-  }
-
-  if (!primaryAddress) {
-    throw new Error("Please enter your primary delivery address.");
-  }
-
-  if (password.length < 8) {
-    throw new Error(
-      "Password must contain at least 8 characters.",
-    );
-  }
-
-  const supabase = publicSupabaseClient();
-
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      emailRedirectTo: `${siteUrl()}/auth/callback`,
-      data: {
-        full_name: `${firstName} ${lastName}`,
-        phone,
-        role: "customer",
-        birthday: birthday || null,
-        referral_code: referralCode || null,
-        marketing_opt_in: marketingOptIn,
-        primary_address: primaryAddress,
-        primary_address_latitude: latitude,
-        primary_address_longitude: longitude,
-        primary_address_place_id: placeId || null,
+  try {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+    const key = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!url || !key) throw new Error("Supabase public configuration is incomplete.");
+    const supabase = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://bufer-feast.vercel.app";
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: siteUrl + "/auth/callback",
+        data: {
+          full_name: firstName + " " + lastName,
+          phone,
+          role: "customer",
+          birthday: birthday || null,
+          primary_address: address,
+          marketing_opt_in: marketing,
+        },
       },
-    },
-  });
+    });
 
-  if (error) {
-    throw new Error(error.message);
+    if (error) {
+      console.error("[customer-signup] auth.signUp failed", { code: error.code, status: error.status, message: error.message });
+      if (error.status === 429 || error.code === "over_email_send_rate_limit") {
+        return { error: "Too many verification emails have been requested. Please wait a few minutes and try again." };
+      }
+      if (error.code === "user_already_exists" || error.code === "email_exists" || error.message.toLowerCase().includes("already registered")) {
+        return { error: "An account with this email already exists. Please log in or reset your password." };
+      }
+      return { error: "Supabase could not create your account or send its verification email. Please check your details and try again." };
+    }
+    if (!data.user) return { error: "We couldn't create your account. Please try again." };
+    if (data.user.identities?.length === 0) return { error: "An account with this email already exists. Please log in or reset your password." };
+
+    const { error: profileError } = await adminClient().from("profiles").upsert({
+      id: data.user.id,
+      email,
+      full_name: firstName + " " + lastName,
+      phone,
+      role: "customer",
+      status: "pending",
+      birthday: birthday || null,
+      primary_address: address,
+      marketing_opt_in: marketing,
+    }, { onConflict: "id" });
+
+    if (profileError) {
+      console.error("[customer-signup] profiles upsert failed", {
+        code: profileError.code,
+        message: profileError.message,
+        details: profileError.details,
+        hint: profileError.hint,
+        userId: data.user.id,
+      });
+      return { error: "Your login was created, but we couldn't finish saving your customer profile. Please contact support before registering again." };
+    }
+  } catch (error) {
+    console.error("[customer-signup] unexpected failure", error);
+    return { error: "We couldn't complete your registration. Please try again. If it continues, contact support." };
   }
 
-  if (!data.user) {
-    throw new Error("The customer account could not be created.");
-  }
-
-  // Prevent Supabase duplicate-signup responses from overwriting an existing profile.
-  if (data.user.identities?.length === 0) {
-    throw new Error("An account with this email already exists. Please log in instead.");
-  }
-
-  // Persist in the same table the admin customer dashboard actually reads.
-  // This also works when email confirmation has not yet been completed.
-  const { error: profileError } = await adminClient().from("profiles").upsert({
-    id: data.user.id, email, full_name: `${firstName} ${lastName}`, phone,
-    role: "customer", status: "pending", birthday: birthday || null,
-    primary_address: primaryAddress, marketing_opt_in: marketingOptIn,
-    primary_address_latitude: latitude, primary_address_longitude: longitude,
-    primary_address_place_id: placeId || null,
-  }, { onConflict: "id" });
-  if (profileError) {
-    throw new Error(`Account created, but the customer profile was not saved: ${profileError.message}. Contact support before registering again.`);
-  }
-
-  redirect(
-    `/verify-email?type=customer&email=${encodeURIComponent(email)}`,
-  );
+  redirect("/check-email?type=customer&email=" + encodeURIComponent(email));
 }

@@ -33,12 +33,42 @@ export async function POST(request: Request) {
     if (!data.user) throw new AuthProblem("Email verification could not be completed. Please try again.", 400, "AUTH_CONFIRM_FAILED");
 
     const admin = adminClient();
-    const { data: profile, error: profileError } = await admin
+    const { data: existingProfile, error: profileError } = await admin
       .from("profiles")
       .select("id,email,role,status")
       .eq("id", data.user.id)
       .maybeSingle();
     if (profileError) throw new AuthProblem("Your account profile could not be checked. Please contact support.", 503, "PROFILE_UNAVAILABLE");
+
+    let profile = existingProfile;
+    // Recover a customer signup where Auth created the user but the first profile save failed.
+    // The profile is created only after Supabase has verified ownership of this email.
+    if (!profile && data.user.email?.toLowerCase() === email && data.user.user_metadata?.role === "customer") {
+      const metadata = data.user.user_metadata || {};
+      const { error: recoveryError } = await admin.from("profiles").upsert({
+        id: data.user.id,
+        email,
+        full_name: typeof metadata.full_name === "string" ? metadata.full_name : "",
+        phone: typeof metadata.phone === "string" ? metadata.phone : null,
+        role: "customer",
+        status: "pending",
+        birthday: typeof metadata.birthday === "string" ? metadata.birthday : null,
+        primary_address: typeof metadata.primary_address === "string" ? metadata.primary_address : null,
+        marketing_opt_in: metadata.marketing_opt_in === true,
+      }, { onConflict: "id" });
+      if (recoveryError) {
+        console.error("[verify-otp] customer profile recovery failed", {
+          code: recoveryError.code,
+          message: recoveryError.message,
+          details: recoveryError.details,
+          hint: recoveryError.hint,
+          userId: data.user.id,
+        });
+        throw new AuthProblem("Your email is verified, but your customer profile could not be completed. Please contact support.", 503, "PROFILE_RECOVERY_FAILED");
+      }
+      profile = { id: data.user.id, email, role: "customer", status: "pending" };
+    }
+
     if (!profile || (profile.email || "").toLowerCase() !== email) {
       throw new AuthProblem("The verified email does not match a registered account profile.", 403, "PROFILE_MISMATCH");
     }

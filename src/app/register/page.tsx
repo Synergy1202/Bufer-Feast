@@ -1,9 +1,13 @@
+"use client";
+
 import Link from "next/link";
+import { useActionState } from "react";
 import { User, Gift, MapPin, ArrowRight } from "lucide-react";
-import { registerCustomer } from "./actions";
+import { registerCustomer, type RegistrationState } from "./actions";
 import { GoogleAddressInput } from "@/components/google-address-input";
 
 export default function CustomerSignupPage() {
+  const [state, formAction, pending] = useActionState<RegistrationState, FormData>(registerCustomer, {});
   return (
     <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-4 py-12">
       <div className="w-full max-w-2xl bg-[#111111] rounded-3xl shadow-xl border border-[#333333] overflow-hidden">
@@ -18,7 +22,7 @@ export default function CustomerSignupPage() {
         </div>
 
         {/* Form */}
-        <form action={registerCustomer} className="p-8 space-y-8">
+        <form action={formAction} className="p-8 space-y-8">
           
           {/* Section 1: Account Basics */}
           <div>
@@ -98,8 +102,9 @@ export default function CustomerSignupPage() {
           </div>
 
           {/* Submit Button */}
-          <button type="submit" className="w-full flex items-center justify-center gap-2 py-4 bg-[#FF5500] text-white font-bold rounded-xl hover:bg-[#e64d00] transition-all duration-300 shadow-lg shadow-[#FF5500]/20">
-            Create Account <ArrowRight size={20} />
+          {state.error && <p role="alert" aria-live="polite" className="rounded-xl border border-red-500/40 bg-red-950/40 px-4 py-3 text-sm leading-6 text-red-200">{state.error}</p>}
+          <button type="submit" disabled={pending} className="w-full flex items-center justify-center gap-2 py-4 bg-[#FF5500] text-white font-bold rounded-xl hover:bg-[#e64d00] transition-all duration-300 shadow-lg shadow-[#FF5500]/20 disabled:cursor-not-allowed disabled:opacity-60">
+            {pending ? "Creating Account..." : <>Create Account <ArrowRight size={20} /></>}
           </button>
 
           <p className="text-center text-sm text-[#a0a0a0]">
