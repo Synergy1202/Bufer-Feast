@@ -26,6 +26,7 @@ export async function registerCustomer(previous: RegistrationState, formData: Fo
   if (!address) return { error: "Please enter your primary delivery address." };
   if (password.length < 8) return { error: "Password must contain at least 8 characters." };
 
+  let accountCreated = false;
   try {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
     const key = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -60,6 +61,7 @@ export async function registerCustomer(previous: RegistrationState, formData: Fo
     }
     if (!data.user) return { error: "We couldn't create your account. Please try again." };
     if (data.user.identities?.length === 0) return { error: "An account with this email already exists. Please log in or reset your password." };
+    accountCreated = true;
 
     const { error: profileError } = await adminClient().from("profiles").upsert({
       id: data.user.id,
@@ -81,10 +83,11 @@ export async function registerCustomer(previous: RegistrationState, formData: Fo
         hint: profileError.hint,
         userId: data.user.id,
       });
-      return { error: "Your login was created, but we couldn't finish saving your customer profile. Please contact support before registering again." };
+      redirect("/check-email?type=customer&email=" + encodeURIComponent(email));
     }
   } catch (error) {
     console.error("[customer-signup] unexpected failure", error);
+    if (accountCreated) redirect("/check-email?type=customer&email=" + encodeURIComponent(email));
     return { error: "We couldn't complete your registration. Please try again. If it continues, contact support." };
   }
 
