@@ -77,6 +77,9 @@ export async function approveVendor(
   note = "",
 ): Promise<void> {
   const adminUser = await requireAdmin();
+  if (adminUser.id === userId) {
+    throw new Error("You cannot approve your own vendor application.");
+  }
   const application = await getApplication(userId);
   const admin = adminClient();
   const now = new Date().toISOString();
