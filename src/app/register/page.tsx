@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useActionState } from "react";
 import { User, Gift, MapPin, ArrowRight } from "lucide-react";
-import { registerCustomer, type RegistrationState } from "./actions";
+import { registerCustomer } from "./actions";
+
+type RegistrationState = { error?: string };
 import { GoogleAddressInput } from "@/components/google-address-input";
 
 export default function CustomerSignupPage() {

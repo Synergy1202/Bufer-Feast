@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import { adminClient } from "@/lib/server/admin";
 
-export type RegistrationState = { error?: string };
+type RegistrationState = { error?: string };
 
 function field(data: FormData, name: string) {
   const value = data.get(name);
