@@ -115,6 +115,11 @@ export async function registerCustomer(
     throw new Error("The customer account could not be created.");
   }
 
+  // Prevent Supabase duplicate-signup responses from overwriting an existing profile.
+  if (data.user.identities?.length === 0) {
+    throw new Error("An account with this email already exists. Please log in instead.");
+  }
+
   // Persist in the same table the admin customer dashboard actually reads.
   // This also works when email confirmation has not yet been completed.
   const { error: profileError } = await adminClient().from("profiles").upsert({

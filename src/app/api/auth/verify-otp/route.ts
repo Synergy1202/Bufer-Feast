@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 
 const otpSchema = z.object({
   email: z.string().trim().email().max(320),
-  token: z.string().regex(/^\\d{6}$/, "Enter the six-digit code from your email."),
+  token: z.string().regex(/^[0-9]{6}$/, "Enter the six-digit code from your email."),
 });
 
 export async function POST(request: Request) {
