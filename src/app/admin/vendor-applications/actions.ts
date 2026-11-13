@@ -82,7 +82,7 @@ function refreshAdminPages() {
 export async function approveVendor(userId: string, note = ""): Promise<void> {
   const adminUser = await requireAdmin();
   if (adminUser.id === userId) throw new Error("You cannot approve your own vendor application.");
-  const application = await getApplication(userId);
+  await getApplication(userId);
   const admin = adminClient();
   const maxResubmissions = policyNumber(process.env.VENDOR_MAX_RESUBMISSIONS, 2);
   const cooldownDays = policyNumber(process.env.VENDOR_REAPPLICATION_COOLDOWN_DAYS, 7);
