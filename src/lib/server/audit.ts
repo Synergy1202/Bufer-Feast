@@ -5,6 +5,7 @@ import { adminClient } from "@/lib/server/admin";
 export type AdminAuditAction =
   | "vendor_approved"
   | "vendor_rejected"
+  | "vendor_rejection_email_retried"
   | "vendor_suspended"
   | "vendor_document_viewed"
   | "customer_account_reviewed"
