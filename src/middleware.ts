@@ -117,7 +117,7 @@ response = NextResponse.next({
     }
 
     if (pathname === "/vendor/pending") {
-      if (profile.status === "approved") {
+      if (profile.status === "approved" || profile.status === "active") {
         const next = request.nextUrl.clone();
         next.pathname = "/vendor/dashboard";
         return NextResponse.redirect(next);
@@ -126,7 +126,7 @@ response = NextResponse.next({
       return response;
     }
 
-    if (profile.status !== "approved") {
+    if (profile.status !== "approved" && profile.status !== "active") {
       const next = request.nextUrl.clone();
       next.pathname = "/vendor/pending";
       return NextResponse.redirect(next);
