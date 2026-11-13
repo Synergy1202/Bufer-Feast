@@ -170,3 +170,103 @@ $$;
 
 REVOKE ALL ON FUNCTION public.reapply_vendor_application(uuid, integer, integer) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.reapply_vendor_application(uuid, integer, integer) TO service_role;
+
+-- Approval/rejection is atomic: application, profile and history change together.
+CREATE OR REPLACE FUNCTION public.review_vendor_application(
+  p_user_id uuid,
+  p_admin_id uuid,
+  p_decision text,
+  p_reason text,
+  p_max_resubmissions integer,
+  p_cooldown_days integer
+)
+RETURNS TABLE (
+  email text,
+  business_name text,
+  reapplication_count integer,
+  reapplication_allowed boolean,
+  next_reapplication_at timestamptz,
+  reviewed_at timestamptz
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $
+DECLARE
+  v_app public.fernami_vendor_applications%ROWTYPE;
+  v_admin public.profiles%ROWTYPE;
+  v_now timestamptz := now();
+  v_allowed boolean := false;
+  v_next timestamptz := NULL;
+BEGIN
+  IF p_decision NOT IN ('approve', 'reject') THEN
+    RAISE EXCEPTION 'Invalid vendor review decision';
+  END IF;
+  IF p_max_resubmissions < 0 OR p_cooldown_days < 0 THEN
+    RAISE EXCEPTION 'Invalid reapplication policy';
+  END IF;
+  IF p_decision = 'reject' AND length(btrim(COALESCE(p_reason, ''))) < 5 THEN
+    RAISE EXCEPTION 'A rejection reason of at least five characters is required';
+  END IF;
+
+  SELECT * INTO v_admin FROM public.profiles WHERE id = p_admin_id;
+  IF NOT FOUND OR v_admin.role <> 'admin' OR v_admin.status <> 'active' THEN
+    RAISE EXCEPTION 'An active administrator is required';
+  END IF;
+
+  SELECT * INTO v_app
+  FROM public.fernami_vendor_applications
+  WHERE user_id = p_user_id
+  FOR UPDATE;
+  IF NOT FOUND OR v_app.status NOT IN ('pending_review', 'pending') THEN
+    RAISE EXCEPTION 'Only pending vendor applications can be reviewed';
+  END IF;
+
+  IF p_decision = 'approve' THEN
+    UPDATE public.fernami_vendor_applications
+    SET status = 'approved', reviewed_at = v_now, reviewed_by = p_admin_id,
+        admin_notes = COALESCE(NULLIF(btrim(p_reason), ''), 'Application approved after administrator review.'),
+        rejection_reason = NULL, suspension_reason = NULL
+    WHERE user_id = p_user_id;
+
+    UPDATE public.profiles
+    SET role = 'vendor', status = 'active', is_open = false,
+        rejection_reason = NULL, suspension_reason = NULL
+    WHERE id = p_user_id AND role = 'vendor';
+
+    UPDATE public.fernami_vendor_application_history
+    SET status = 'approved', reviewed_at = v_now, reviewed_by = p_admin_id
+    WHERE user_id = p_user_id AND attempt_number = v_app.reapplication_count + 1;
+  ELSE
+    v_allowed := v_app.reapplication_count < p_max_resubmissions;
+    IF v_allowed THEN
+      v_next := v_now + make_interval(days => p_cooldown_days);
+    END IF;
+
+    UPDATE public.fernami_vendor_applications
+    SET status = 'rejected', reviewed_at = v_now, reviewed_by = p_admin_id,
+        rejection_reason = btrim(p_reason), admin_notes = btrim(p_reason),
+        suspension_reason = NULL, reapplication_allowed = v_allowed,
+        next_reapplication_at = v_next, rejection_email_status = 'pending',
+        rejection_email_sent_at = NULL, rejection_email_error = NULL
+    WHERE user_id = p_user_id;
+
+    UPDATE public.profiles
+    SET role = 'vendor', status = 'rejected', is_open = false,
+        rejection_reason = btrim(p_reason), suspension_reason = NULL
+    WHERE id = p_user_id AND role = 'vendor';
+
+    UPDATE public.fernami_vendor_application_history
+    SET status = 'rejected', reviewed_at = v_now, reviewed_by = p_admin_id,
+        rejection_reason = btrim(p_reason)
+    WHERE user_id = p_user_id AND attempt_number = v_app.reapplication_count + 1;
+  END IF;
+
+  RETURN QUERY
+  SELECT v_app.email, v_app.business_name, v_app.reapplication_count,
+         v_allowed, v_next, v_now;
+END;
+$;
+
+REVOKE ALL ON FUNCTION public.review_vendor_application(uuid, uuid, text, text, integer, integer) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.review_vendor_application(uuid, uuid, text, text, integer, integer) TO service_role;
