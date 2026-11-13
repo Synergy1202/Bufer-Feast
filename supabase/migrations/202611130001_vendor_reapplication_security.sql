@@ -266,7 +266,7 @@ BEGIN
   SELECT v_app.email, v_app.business_name, v_app.reapplication_count,
          v_allowed, v_next, v_now;
 END;
-$;
+$$;
 
 REVOKE ALL ON FUNCTION public.review_vendor_application(uuid, uuid, text, text, integer, integer) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.review_vendor_application(uuid, uuid, text, text, integer, integer) TO service_role;
