@@ -153,7 +153,7 @@ export async function rejectVendor(userId: string, reason: string): Promise<void
       reapplicationAllowed,
       nextReapplicationAt,
       remainingAttempts: Math.max(0, maxResubmissions - used),
-      idempotencyKey: "vendor-rejection-" + userId + "-" + new Date(reviewedAt).getTime(),
+      idempotencyKey: `vendor-rejection-${userId}-${new Date(reviewedAt).getTime()}`,
     });
     await admin.from("fernami_vendor_applications").update({
       rejection_email_status: "sent",
@@ -191,7 +191,7 @@ export async function retryVendorRejectionEmail(userId: string): Promise<void> {
       reapplicationAllowed: application.reapplication_allowed === true,
       nextReapplicationAt: application.next_reapplication_at,
       remainingAttempts: Math.max(0, maxResubmissions - used),
-      idempotencyKey: "vendor-rejection-" + userId + "-" + new Date(application.reviewed_at).getTime(),
+      idempotencyKey: `vendor-rejection-${userId}-${new Date(application.reviewed_at).getTime()}`,
     });
     await admin.from("fernami_vendor_applications").update({
       rejection_email_status: "sent", rejection_email_sent_at: new Date().toISOString(), rejection_email_error: null,
