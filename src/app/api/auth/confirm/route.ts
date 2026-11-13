@@ -42,7 +42,7 @@ export async function POST(request: Request) {
     if (!data.user) throw new AuthProblem("The confirmation link could not be matched to an account.", 400, "AUTH_CONFIRM_USER_MISSING");
     const admin = adminClient();
     const { data: profile, error: lookupError } = await admin.from("profiles")
-      .select("role,status,email").eq("id", data.user.id).maybeSingle();
+      .select("role,status,email,primary_address").eq("id", data.user.id).maybeSingle();
     if (lookupError) {
       console.error("[auth-confirm] profile lookup failed", { code: lookupError.code, message: lookupError.message, userId: data.user.id });
       throw new AuthProblem("Your account profile could not be loaded. Please contact support.", 503, "PROFILE_UNAVAILABLE");
@@ -67,7 +67,7 @@ export async function POST(request: Request) {
     } else {
       throw new AuthProblem("This account cannot use public email confirmation.", 403, "ACCOUNT_ROLE_INVALID");
     }
-    return reply({ ok: true, signedIn: !!data.session, role: profile.role, status: profile.status });
+    return reply({ ok: true, signedIn: !!data.session, role: profile.role, status: profile.status, hasAddress: !!profile.primary_address });
   } catch (error) {
     return apiError(error);
   }
