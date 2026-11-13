@@ -47,7 +47,7 @@ SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
 BEGIN
-  IF COALESCE(auth.role(), '') <> 'service_role' THEN
+  IF COALESCE(auth.role(), '') IN ('authenticated', 'anon') THEN
     IF TG_OP = 'INSERT' THEN
       IF NEW.role IS DISTINCT FROM 'customer' OR
          (NEW.status IS DISTINCT FROM 'pending' AND NEW.status IS DISTINCT FROM 'active') THEN
@@ -75,7 +75,7 @@ SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
 BEGIN
-  IF COALESCE(auth.role(), '') <> 'service_role' THEN
+  IF COALESCE(auth.role(), '') IN ('authenticated', 'anon') THEN
     IF TG_OP = 'INSERT' THEN
       RAISE EXCEPTION 'Vendor applications must be created through the trusted server workflow';
     END IF;
