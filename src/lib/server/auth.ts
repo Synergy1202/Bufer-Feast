@@ -279,7 +279,7 @@ export async function requireVendor() {
     );
   }
 
-  if (profile.status !== "approved") {
+  if (profile.status !== "approved" && profile.status !== "active") {
     throw new AuthProblem(
       "Your vendor application is still awaiting approval.",
       403,
