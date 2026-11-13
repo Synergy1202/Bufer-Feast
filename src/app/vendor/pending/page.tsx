@@ -79,7 +79,7 @@ export default async function VendorPendingPage({ searchParams }: { searchParams
   const profile =
     profileResult.data as unknown as ProfileRecord | null;
 
-  if (!profile || profile.role !== "vendor") {
+  if (profile?.role !== "vendor") {
     redirect("/");
   }
 
