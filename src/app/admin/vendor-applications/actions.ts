@@ -173,7 +173,7 @@ export async function retryVendorRejectionEmail(userId: string): Promise<void> {
   const adminUser = await requireAdmin();
   const admin = adminClient();
   const { data: application, error } = await admin.from("fernami_vendor_applications")
-    .select("user_id,email,business_name,status,rejection_reason,reviewed_at,reapplication_count,reapplication_allowed,next_reapplication_at")
+    .select("user_id,email,business_name,status,rejection_reason,reviewed_at,reapplication_count,reapplication_allowed,next_reapplication_at,rejection_email_status")
     .eq("user_id", userId).maybeSingle();
   if (error || !application || application.status !== "rejected" || !application.rejection_reason || !application.reviewed_at) {
     throw new Error("A rejected application with a saved reason is required before retrying its email.");
