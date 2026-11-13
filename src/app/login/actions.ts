@@ -115,18 +115,8 @@ export async function loginAction(
       redirect("/vendor/pending");
     }
 
-    if (profile.status === "rejected") {
-      return {
-        error:
-          "Your vendor application was rejected. Please contact support.",
-      };
-    }
-
-    if (profile.status === "suspended") {
-      return {
-        error:
-          "Your vendor account is suspended. Please contact support.",
-      };
+    if (profile.status === "rejected" || profile.status === "suspended") {
+      redirect("/vendor/pending");
     }
 
     return {
