@@ -126,13 +126,13 @@ BEGIN
     RAISE EXCEPTION 'Only rejected vendor applications may be resubmitted';
   END IF;
 
-  IF v_app.reapplication_count >= p_max_resubmissions OR NOT v_app.reapplication_allowed THEN
+  IF v_app.reapplication_count >= p_max_resubmissions THEN
     RAISE EXCEPTION 'The permitted number of reapplications has been reached';
   END IF;
 
   v_next_allowed := COALESCE(
-    v_app.next_reapplication_at,
-    v_app.reviewed_at + make_interval(days => p_cooldown_days)
+    v_app.reviewed_at + make_interval(days => p_cooldown_days),
+    v_app.next_reapplication_at
   );
 
   IF v_next_allowed IS NOT NULL AND now() < v_next_allowed THEN
