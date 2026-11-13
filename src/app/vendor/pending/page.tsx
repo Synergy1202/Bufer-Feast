@@ -13,6 +13,11 @@ import { adminClient } from "@/lib/server/admin";
 
 export const dynamic = "force-dynamic";
 
+function policyNumber(value: string | undefined, fallback: number) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
 type ProfileRecord = {
   id: string;
   email: string | null;
@@ -140,10 +145,10 @@ export default async function VendorPendingPage({ searchParams }: { searchParams
   const isPending =
     !isRejected &&
     !isSuspended;
-  const maxResubmissions = Number(process.env.VENDOR_MAX_RESUBMISSIONS || 2);
+  const maxResubmissions = policyNumber(process.env.VENDOR_MAX_RESUBMISSIONS, 2);
   const reapplicationCount = application?.reapplication_count || 0;
   const nextReapplicationAt = application?.reviewed_at
-    ? new Date(new Date(application.reviewed_at).getTime() + Number(process.env.VENDOR_REAPPLICATION_COOLDOWN_DAYS || 7) * 86400000).toISOString()
+    ? new Date(new Date(application.reviewed_at).getTime() + policyNumber(process.env.VENDOR_REAPPLICATION_COOLDOWN_DAYS, 7) * 86400000).toISOString()
     : application?.next_reapplication_at || null;
   const reapplicationAvailable = isRejected
     && reapplicationCount < maxResubmissions
