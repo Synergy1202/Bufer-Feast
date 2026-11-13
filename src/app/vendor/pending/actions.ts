@@ -40,7 +40,7 @@ export async function reapplyVendor() {
       : /permitted number/i.test(error.message)
         ? "You have reached the reapplication limit."
         : "We could not resubmit your application. Please contact support.";
-    redirect("/vendor/pending?error=" + encodeURIComponent(message));
+    redirect(`/vendor/pending?error=${encodeURIComponent(message)}`);
   }
 
   revalidatePath("/vendor/pending");
