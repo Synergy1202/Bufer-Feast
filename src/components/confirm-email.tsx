@@ -20,14 +20,14 @@ export function ConfirmEmail() {
     setBusy(true);
     setError("");
     try {
-      const result = await requestJson<{ ok: boolean; signedIn?: boolean; role?: string; status?: string }>(
+      const result = await requestJson<{ ok: boolean; signedIn?: boolean; role?: string; status?: string; hasAddress?: boolean }>(
         "/api/auth/confirm",
         { method: "POST", bodyJSON: "{}" },
       );
       const session = await authChanged();
       if (result.signedIn === false || !session.user) router.replace("/login?confirmed=1");
       else if (result.role === "vendor") router.replace(result.status === "approved" || result.status === "active" ? "/vendor/dashboard" : "/vendor/pending");
-      else router.replace("/account");
+      else router.replace(result.hasAddress ? "/account" : "/account/address");
       router.refresh();
     } catch (reason) {
       setError(errorText(reason));
