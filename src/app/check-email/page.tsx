@@ -1,13 +1,10 @@
-import { redirect } from "next/navigation";
+import { EmailConfirmationPending } from "@/components/email-confirmation-pending";
 
-type CheckEmailPageProps = {
-  searchParams: Promise<{ type?: string; email?: string }>;
-};
+type CheckEmailPageProps = { searchParams: Promise<{ type?: string; email?: string }> };
 
 export default async function CheckEmailPage({ searchParams }: CheckEmailPageProps) {
   const params = await searchParams;
-  const query = new URLSearchParams();
-  if (params.type === "vendor" || params.type === "customer") query.set("type", params.type);
-  if (params.email) query.set("email", params.email);
-  redirect(`/verify-email?${query.toString()}`);
+  const accountType = params.type === "vendor" ? "vendor" : "customer";
+  const email = typeof params.email === "string" ? params.email.trim().toLowerCase() : "";
+  return <EmailConfirmationPending email={email} accountType={accountType} />;
 }
