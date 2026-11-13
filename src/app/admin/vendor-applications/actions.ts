@@ -96,6 +96,7 @@ export async function approveVendor(userId: string, note = ""): Promise<void> {
   });
   if (error) {
     console.error("[vendor-review] approval failed", { code: error.code, message: error.message, userId });
+    if (/confirm the signup email/i.test(error.message)) throw new Error("The vendor must confirm their signup email before approval.");
     throw new Error("The vendor application could not be approved. Refresh and try again.");
   }
   await recordAdminAudit({
@@ -126,6 +127,7 @@ export async function rejectVendor(userId: string, reason: string): Promise<void
   });
   if (reviewError) {
     console.error("[vendor-review] rejection failed", { code: reviewError.code, message: reviewError.message, userId });
+    if (/confirm the signup email/i.test(reviewError.message)) throw new Error("The vendor must confirm their signup email before review.");
     throw new Error("The vendor application could not be rejected. Refresh and try again.");
   }
   const review = Array.isArray(reviewData) ? reviewData[0] : reviewData;
