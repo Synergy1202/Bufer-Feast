@@ -21,8 +21,6 @@ CREATE TABLE IF NOT EXISTS public.fernami_vendor_application_history (
   UNIQUE (user_id, attempt_number)
 );
 
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.fernami_vendor_applications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.fernami_vendor_application_history ENABLE ROW LEVEL SECURITY;
 CREATE INDEX IF NOT EXISTS fernami_vendor_application_history_user_idx
   ON public.fernami_vendor_application_history(user_id, attempt_number DESC);
