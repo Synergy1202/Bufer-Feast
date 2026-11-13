@@ -164,7 +164,7 @@ export async function registerCustomer(
       email,
       password,
       options: {
-        emailRedirectTo: siteUrl + "/auth/callback",
+        emailRedirectTo: siteUrl + "/auth/confirm",
         data: {
           full_name: fullName,
           phone,
