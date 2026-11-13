@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/server/auth";
 import { adminClient } from "@/lib/server/admin";
 import { recordAdminAudit } from "@/lib/server/audit";
+import { sendVendorRejectionEmail } from "@/lib/server/resend";
 
 function validateUserId(userId: string) {
   if (!userId || typeof userId !== "string") {
@@ -41,7 +42,7 @@ async function getApplication(userId: string) {
   const result = await admin
     .from("fernami_vendor_applications")
     .select(
-      "user_id, email, business_name, status",
+      "user_id, email, business_name, status, reapplication_count",
     )
     .eq("user_id", userId)
     .maybeSingle();
@@ -61,6 +62,7 @@ async function getApplication(userId: string) {
     email: string | null;
     business_name: string | null;
     status: string | null;
+    reapplication_count: number | null;
   };
 }
 
@@ -81,6 +83,7 @@ export async function approveVendor(
     throw new Error("You cannot approve your own vendor application.");
   }
   const application = await getApplication(userId);
+  if (!["pending_review", "pending"].includes(application.status || "")) throw new Error("Only pending vendor applications can be approved.");
   const admin = adminClient();
   const now = new Date().toISOString();
 
@@ -122,6 +125,9 @@ export async function approveVendor(
     );
   }
 
+  await admin.from("fernami_vendor_application_history").update({ status: "approved", reviewed_at: now, reviewed_by: adminUser.id })
+    .eq("user_id", userId).eq("attempt_number", (application.reapplication_count || 0) + 1);
+
   await recordAdminAudit({
     adminUserId: adminUser.id,
     action: "vendor_approved",
@@ -135,60 +141,110 @@ export async function approveVendor(
   refreshAdminPages();
 }
 
-export async function rejectVendor(
-  userId: string,
-  reason: string,
-): Promise<void> {
+export async function rejectVendor(userId: string, reason: string): Promise<void> {
   const adminUser = await requireAdmin();
   const rejectionReason = cleanReason(reason);
   const application = await getApplication(userId);
+  if (!["pending_review", "pending"].includes(application.status || "")) throw new Error("Only pending vendor applications can be rejected.");
+
   const admin = adminClient();
   const now = new Date().toISOString();
+  const maxResubmissions = Math.max(0, Number.parseInt(process.env.VENDOR_MAX_RESUBMISSIONS || "2", 10) || 0);
+  const cooldownDays = Math.max(0, Number.parseInt(process.env.VENDOR_REAPPLICATION_COOLDOWN_DAYS || "7", 10) || 0);
+  const used = application.reapplication_count || 0;
+  const reapplicationAllowed = used < maxResubmissions;
+  const nextReapplicationAt = reapplicationAllowed ? new Date(Date.now() + cooldownDays * 86400000).toISOString() : null;
 
-  const { error: applicationError } = await admin
-    .from("fernami_vendor_applications")
-    .update({
-      status: "rejected",
-      reviewed_at: now,
-      reviewed_by: adminUser.id,
-      rejection_reason: rejectionReason,
-      admin_notes: rejectionReason,
-      suspension_reason: null,
-    })
-    .eq("user_id", userId);
+  const { error: applicationError } = await admin.from("fernami_vendor_applications").update({
+    status: "rejected",
+    reviewed_at: now,
+    reviewed_by: adminUser.id,
+    rejection_reason: rejectionReason,
+    admin_notes: rejectionReason,
+    suspension_reason: null,
+    reapplication_allowed: reapplicationAllowed,
+    next_reapplication_at: nextReapplicationAt,
+    rejection_email_status: "pending",
+    rejection_email_sent_at: null,
+    rejection_email_error: null,
+  }).eq("user_id", userId).in("status", ["pending_review", "pending"]);
+  if (applicationError) throw new Error("Could not reject the vendor application.");
 
-  if (applicationError) {
-    throw new Error(
-      `Could not reject application: ${applicationError.message}`,
-    );
-  }
+  const { error: profileError } = await admin.from("profiles").update({
+    role: "vendor", status: "rejected", is_open: false,
+    rejection_reason: rejectionReason, suspension_reason: null,
+  }).eq("id", userId).eq("role", "vendor");
+  if (profileError) throw new Error("Could not update the rejected vendor profile.");
 
-  const { error: profileError } = await admin
-    .from("profiles")
-    .update({
-      role: "vendor",
-      status: "rejected",
-      is_open: false,
-      rejection_reason: rejectionReason,
-      suspension_reason: null,
-    })
-    .eq("id", userId)
-    .eq("role", "vendor");
-
-  if (profileError) {
-    throw new Error(
-      `Could not update rejected vendor profile: ${profileError.message}`,
-    );
-  }
+  await admin.from("fernami_vendor_application_history").update({
+    status: "rejected", reviewed_at: now, reviewed_by: adminUser.id, rejection_reason: rejectionReason,
+  }).eq("user_id", userId).eq("attempt_number", used + 1);
 
   await recordAdminAudit({
-    adminUserId: adminUser.id,
-    action: "vendor_rejected",
-    targetUserId: userId,
-    targetApplicationUserId: userId,
-    notes: rejectionReason,
+    adminUserId: adminUser.id, action: "vendor_rejected",
+    targetUserId: userId, targetApplicationUserId: userId, notes: rejectionReason,
   });
 
+  try {
+    if (!application.email) throw new Error("The vendor application has no email address.");
+    await sendVendorRejectionEmail({
+      to: application.email,
+      businessName: application.business_name || "your business",
+      reason: rejectionReason,
+      reapplicationAllowed,
+      nextReapplicationAt,
+      remainingAttempts: Math.max(0, maxResubmissions - used),
+      idempotencyKey: "vendor-rejection-" + userId + "-" + new Date(now).getTime(),
+    });
+    await admin.from("fernami_vendor_applications").update({
+      rejection_email_status: "sent", rejection_email_sent_at: new Date().toISOString(), rejection_email_error: null,
+    }).eq("user_id", userId);
+  } catch (emailError) {
+    const message = emailError instanceof Error ? emailError.message : "Unknown email error";
+    console.error("[vendor-rejection-email] delivery failed", { userId, message });
+    await admin.from("fernami_vendor_applications").update({
+      rejection_email_status: "failed", rejection_email_error: message.slice(0, 500),
+    }).eq("user_id", userId);
+  }
+  refreshAdminPages();
+}
+
+export async function retryVendorRejectionEmail(userId: string): Promise<void> {
+  const adminUser = await requireAdmin();
+  const admin = adminClient();
+  const { data: application, error } = await admin.from("fernami_vendor_applications")
+    .select("user_id,email,business_name,status,rejection_reason,reviewed_at,reapplication_count,reapplication_allowed,next_reapplication_at")
+    .eq("user_id", userId).maybeSingle();
+  if (error || !application || application.status !== "rejected" || !application.rejection_reason || !application.reviewed_at) {
+    throw new Error("A rejected application with a saved reason is required before retrying its email.");
+  }
+  const maxResubmissions = Math.max(0, Number.parseInt(process.env.VENDOR_MAX_RESUBMISSIONS || "2", 10) || 0);
+  const used = application.reapplication_count || 0;
+  try {
+    if (!application.email) throw new Error("The vendor application has no email address.");
+    await sendVendorRejectionEmail({
+      to: application.email,
+      businessName: application.business_name || "your business",
+      reason: application.rejection_reason,
+      reapplicationAllowed: application.reapplication_allowed === true,
+      nextReapplicationAt: application.next_reapplication_at,
+      remainingAttempts: Math.max(0, maxResubmissions - used),
+      idempotencyKey: "vendor-rejection-" + userId + "-" + new Date(application.reviewed_at).getTime(),
+    });
+    await admin.from("fernami_vendor_applications").update({
+      rejection_email_status: "sent", rejection_email_sent_at: new Date().toISOString(), rejection_email_error: null,
+    }).eq("user_id", userId).eq("status", "rejected");
+    await recordAdminAudit({
+      adminUserId: adminUser.id, action: "vendor_rejection_email_retried",
+      targetUserId: userId, targetApplicationUserId: userId, notes: "Resent vendor rejection email.",
+    });
+  } catch (emailError) {
+    const message = emailError instanceof Error ? emailError.message : "Unknown email error";
+    await admin.from("fernami_vendor_applications").update({
+      rejection_email_status: "failed", rejection_email_error: message.slice(0, 500),
+    }).eq("user_id", userId).eq("status", "rejected");
+    throw new Error("The rejection email could not be sent. Check the Resend configuration and try again.");
+  }
   refreshAdminPages();
 }
 
