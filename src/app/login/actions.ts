@@ -30,12 +30,22 @@ export async function loginAction(
     };
   }
 
-  const client = await authClient();
+  let client: Awaited<ReturnType<typeof authClient>>;
+  try {
+    client = await authClient();
+  } catch (reason) {
+    console.error("[login] Supabase client initialization failed", reason instanceof Error ? reason.message : "Unknown error");
+    return { error: "Login is temporarily unavailable. Please try again shortly." };
+  }
 
-  const { data, error } = await client.auth.signInWithPassword({
-    email,
-    password,
-  });
+  let signInResult: Awaited<ReturnType<typeof client.auth.signInWithPassword>>;
+  try {
+    signInResult = await client.auth.signInWithPassword({ email, password });
+  } catch (reason) {
+    console.error("[login] sign-in request failed", reason instanceof Error ? reason.message : "Unknown error");
+    return { error: "We could not complete your login. Please try again shortly." };
+  }
+  const { data, error } = signInResult;
 
   if (error) {
     if (
@@ -59,11 +69,17 @@ export async function loginAction(
     };
   }
 
-  const { data: profile, error: profileError } = await client
-    .from("profiles")
-    .select("id, role, status")
-    .eq("id", data.user.id)
-    .maybeSingle();
+  let profile: { id: string; role: string; status: string } | null = null;
+  let profileError: { message: string } | null = null;
+  try {
+    const result = await client.from("profiles")
+      .select("id, role, status").eq("id", data.user.id).maybeSingle();
+    profile = result.data as typeof profile;
+    profileError = result.error;
+  } catch (reason) {
+    console.error("[login] profile request failed", reason instanceof Error ? reason.message : "Unknown error");
+    return { error: "Your account profile could not be loaded. Please try again." };
+  }
 
   if (profileError) {
     console.error("Profile lookup error:", profileError.message);
