@@ -52,7 +52,9 @@ BEGIN
       IF NEW.role IS DISTINCT FROM 'customer' OR NEW.status IS DISTINCT FROM 'pending' THEN
         RAISE EXCEPTION 'Only trusted server operations may create privileged or active profiles';
       END IF;
-    ELSIF NEW.role IS DISTINCT FROM OLD.role OR NEW.status IS DISTINCT FROM OLD.status THEN
+    ELSIF NEW.role IS DISTINCT FROM OLD.role OR NEW.status IS DISTINCT FROM OLD.status OR
+          NEW.rejection_reason IS DISTINCT FROM OLD.rejection_reason OR
+          NEW.suspension_reason IS DISTINCT FROM OLD.suspension_reason THEN
       RAISE EXCEPTION 'Only authorized server operations may change profile role or status';
     END IF;
   END IF;
@@ -83,7 +85,11 @@ BEGIN
        NEW.reapplication_count IS DISTINCT FROM OLD.reapplication_count OR
        NEW.reapplication_allowed IS DISTINCT FROM OLD.reapplication_allowed OR
        NEW.next_reapplication_at IS DISTINCT FROM OLD.next_reapplication_at OR
-       NEW.rejection_email_status IS DISTINCT FROM OLD.rejection_email_status THEN
+       NEW.admin_notes IS DISTINCT FROM OLD.admin_notes OR
+       NEW.suspension_reason IS DISTINCT FROM OLD.suspension_reason OR
+       NEW.rejection_email_status IS DISTINCT FROM OLD.rejection_email_status OR
+       NEW.rejection_email_sent_at IS DISTINCT FROM OLD.rejection_email_sent_at OR
+       NEW.rejection_email_error IS DISTINCT FROM OLD.rejection_email_error THEN
       RAISE EXCEPTION 'Only authorized administrators may change vendor application review fields';
     END IF;
   END IF;
