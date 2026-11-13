@@ -141,6 +141,7 @@ DECLARE
   v_app public.fernami_vendor_applications%ROWTYPE;
   v_updated public.fernami_vendor_applications%ROWTYPE;
   v_next_allowed timestamptz;
+  v_email_confirmed_at timestamptz;
 BEGIN
   IF p_max_resubmissions < 0 OR p_cooldown_days < 0 THEN
     RAISE EXCEPTION 'Invalid reapplication policy';
@@ -148,7 +149,7 @@ BEGIN
 
   SELECT email_confirmed_at INTO v_email_confirmed_at FROM auth.users WHERE id = p_user_id;
   IF v_email_confirmed_at IS NULL THEN
-    RAISE EXCEPTION 'The vendor must confirm the signup email before administrator review';
+    RAISE EXCEPTION 'The vendor must confirm the signup email before reapplying';
   END IF;
 
   SELECT * INTO v_app
@@ -250,6 +251,11 @@ BEGIN
   SELECT * INTO v_admin FROM public.profiles WHERE id = p_admin_id;
   IF NOT FOUND OR v_admin.role <> 'admin' OR v_admin.status <> 'active' THEN
     RAISE EXCEPTION 'An active administrator is required';
+  END IF;
+
+  SELECT email_confirmed_at INTO v_email_confirmed_at FROM auth.users WHERE id = p_user_id;
+  IF v_email_confirmed_at IS NULL THEN
+    RAISE EXCEPTION 'The vendor must confirm the signup email before administrator review';
   END IF;
 
   SELECT * INTO v_app
