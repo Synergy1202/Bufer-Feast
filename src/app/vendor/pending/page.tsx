@@ -142,10 +142,10 @@ export default async function VendorPendingPage({ searchParams }: { searchParams
     !isSuspended;
   const maxResubmissions = Number(process.env.VENDOR_MAX_RESUBMISSIONS || 2);
   const reapplicationCount = application?.reapplication_count || 0;
-  const nextReapplicationAt = application?.next_reapplication_at
-    || (application?.reviewed_at ? new Date(new Date(application.reviewed_at).getTime() + Number(process.env.VENDOR_REAPPLICATION_COOLDOWN_DAYS || 7) * 86400000).toISOString() : null);
+  const nextReapplicationAt = application?.reviewed_at
+    ? new Date(new Date(application.reviewed_at).getTime() + Number(process.env.VENDOR_REAPPLICATION_COOLDOWN_DAYS || 7) * 86400000).toISOString()
+    : application?.next_reapplication_at || null;
   const reapplicationAvailable = isRejected
-    && application?.reapplication_allowed !== false
     && reapplicationCount < maxResubmissions
     && (!nextReapplicationAt || Date.now() >= new Date(nextReapplicationAt).getTime());
 
