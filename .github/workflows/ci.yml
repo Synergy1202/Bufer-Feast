@@ -1,0 +1,30 @@
+name: Quality checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, "fix/vendor-auth-email-and-approval"]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    env:
+      ORDER_STORAGE: local
+      NEXT_PUBLIC_SITE_URL: https://bufer-feast.vercel.app
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Run Biome lint
+        run: npx biome lint src/app/admin/page.tsx src/app/admin/vendor-applications/actions.ts src/app/admin/vendor-applications/page.tsx src/app/api/auth/confirm/route.ts src/app/api/auth/resend-otp/route.ts src/app/auth/callback/route.ts src/app/check-email/page.tsx src/app/login/actions.ts src/app/register/actions.ts src/app/signup/actions.ts src/app/signup/page.tsx src/app/vendor/pending/actions.ts src/app/vendor/pending/page.tsx src/app/vendor/settings/actions.ts src/app/verify-email/page.tsx src/components/confirm-email.tsx src/components/email-confirmation-pending.tsx src/lib/server/auth.ts src/lib/server/resend.ts src/middleware.ts
+      - name: Run TypeScript checks
+        run: npm run typecheck
+      - name: Run production build
+        run: npm run build

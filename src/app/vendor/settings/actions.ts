@@ -88,8 +88,14 @@ export async function updateVendorSettings(formData: FormData) {
   const notifyEmail = booleanValue(formData, "notify_email");
   const isOpen = booleanValue(formData, "is_open");
 
-  const currentIdUrl = textValue(formData, "current_id_url");
-  const currentCacUrl = textValue(formData, "current_cac_url");
+  const { data: currentProfile, error: profileLookupError } = await admin
+    .from("profiles")
+    .select("id_document_url,cac_document_url")
+    .eq("id", vendor.id)
+    .maybeSingle();
+  if (profileLookupError || !currentProfile) {
+    throw new Error("Your vendor profile could not be loaded. Please try again.");
+  }
 
   const [idDocumentPath, cacDocumentPath] = await Promise.all([
     uploadPrivateDocument(
@@ -119,8 +125,8 @@ export async function updateVendorSettings(formData: FormData) {
       is_open: isOpen,
       opening_hours:
         openingHours || "Monday - Saturday: 8:00 AM - 6:00 PM",
-      id_document_url: idDocumentPath || currentIdUrl || null,
-      cac_document_url: cacDocumentPath || currentCacUrl || null,
+      id_document_url: idDocumentPath || currentProfile.id_document_url || null,
+      cac_document_url: cacDocumentPath || currentProfile.cac_document_url || null,
     })
     .eq("id", vendor.id);
 

@@ -8,9 +8,15 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { verifiedCustomer } from "@/lib/server/auth";
+import { reapplyVendor } from "./actions";
 import { adminClient } from "@/lib/server/admin";
 
 export const dynamic = "force-dynamic";
+
+function policyNumber(value: string | undefined, fallback: number) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback;
+}
 
 type ProfileRecord = {
   id: string;
@@ -32,9 +38,13 @@ type ApplicationRecord = {
   admin_notes: string | null;
   reviewed_at: string | null;
   submitted_at: string | null;
+  reapplication_count: number | null;
+  reapplication_allowed: boolean | null;
+  next_reapplication_at: string | null;
 };
 
-export default async function VendorPendingPage() {
+export default async function VendorPendingPage({ searchParams }: { searchParams: Promise<{ error?: string; submitted?: string }> }) {
+  const params = await searchParams;
   const customer = await verifiedCustomer();
 
   if (!customer) {
@@ -69,7 +79,7 @@ export default async function VendorPendingPage() {
   const profile =
     profileResult.data as unknown as ProfileRecord | null;
 
-  if (!profile || profile.role !== "vendor") {
+  if (profile?.role !== "vendor") {
     redirect("/");
   }
 
@@ -92,6 +102,9 @@ export default async function VendorPendingPage() {
         "admin_notes",
         "reviewed_at",
         "submitted_at",
+        "reapplication_count",
+        "reapplication_allowed",
+        "next_reapplication_at",
       ].join(", "),
     )
     .eq("user_id", customer.id)
@@ -132,6 +145,14 @@ export default async function VendorPendingPage() {
   const isPending =
     !isRejected &&
     !isSuspended;
+  const maxResubmissions = policyNumber(process.env.VENDOR_MAX_RESUBMISSIONS, 2);
+  const reapplicationCount = application?.reapplication_count || 0;
+  const nextReapplicationAt = application?.reviewed_at
+    ? new Date(new Date(application.reviewed_at).getTime() + policyNumber(process.env.VENDOR_REAPPLICATION_COOLDOWN_DAYS, 7) * 86400000).toISOString()
+    : application?.next_reapplication_at || null;
+  const reapplicationAvailable = isRejected
+    && reapplicationCount < maxResubmissions
+    && (!nextReapplicationAt || Date.now() >= new Date(nextReapplicationAt).getTime());
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-12">
@@ -170,6 +191,9 @@ export default async function VendorPendingPage() {
                 "Your vendor application"}
             </p>
           </div>
+
+          {params.error && <p role="alert" className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{params.error}</p>}
+          {params.submitted === "1" && <p role="status" className="mt-6 rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-800">Your reapplication has been submitted and is awaiting review.</p>}
 
           {isPending && (
             <div className="mt-8 rounded-xl border border-yellow-200 bg-yellow-50 p-5">
@@ -213,6 +237,24 @@ export default async function VendorPendingPage() {
                   </p>
                 </div>
               </div>
+            </div>
+          )}
+
+          {isRejected && (
+            <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-5">
+              {reapplicationAvailable ? (
+                <>
+                  <h2 className="font-bold text-slate-900">You can submit a reapplication</h2>
+                  <p className="mt-2 text-sm leading-6 text-slate-700">You have used {reapplicationCount} of {maxResubmissions} permitted reapplications. Submitting again will return your existing application to review.</p>
+                  <form action={reapplyVendor} className="mt-4">
+                    <button type="submit" className="rounded-xl bg-orange-600 px-5 py-3 font-semibold text-white hover:bg-orange-700">Resubmit application</button>
+                  </form>
+                </>
+              ) : nextReapplicationAt && reapplicationCount < maxResubmissions ? (
+                <p className="text-sm leading-6 text-slate-700">You may reapply after {new Date(nextReapplicationAt).toLocaleString("en-NG", { timeZone: "Africa/Lagos" })} (Nigeria time).</p>
+              ) : (
+                <p className="text-sm leading-6 text-slate-700">The reapplication limit for this account has been reached. Please contact support if you need help.</p>
+              )}
             </div>
           )}
 

@@ -28,7 +28,7 @@ function safeSignupError(error: { code?: string; status?: number; message?: stri
     return "The development email sender does not allow this recipient. Use an authorised test email or check your SMTP settings.";
   }
   if (code === "user_already_exists" || code === "email_exists" || message.includes("already registered")) {
-    return "An account with this email already exists. Log in or use the resend-code option if you have not verified it yet.";
+    return "An account with this email already exists. Log in or use the resend-confirmation-link option if you have not verified it yet.";
   }
   if (code === "weak_password" || message.includes("password")) {
     return "Please choose a stronger password with at least 8 characters.";
@@ -164,7 +164,7 @@ export async function registerCustomer(
       email,
       password,
       options: {
-        emailRedirectTo: siteUrl + "/auth/callback",
+        emailRedirectTo: `${siteUrl}/auth/confirm`,
         data: {
           full_name: fullName,
           phone,
@@ -226,5 +226,5 @@ export async function registerCustomer(
     return { error: "We couldn't complete your registration. Please try again. If the problem continues, contact support." };
   }
 
-  redirect("/check-email?type=customer&email=" + encodeURIComponent(email));
+  redirect(`/check-email?type=customer&email=${encodeURIComponent(email)}`);
 }

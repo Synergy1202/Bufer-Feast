@@ -271,7 +271,7 @@ export async function requireVendor() {
     );
   }
 
-  if (!profile || profile.role !== "vendor") {
+  if (profile?.role !== "vendor") {
     throw new AuthProblem(
       "Access denied. This area is for registered vendors only.",
       403,
@@ -279,7 +279,7 @@ export async function requireVendor() {
     );
   }
 
-  if (profile.status !== "approved") {
+  if (profile.status !== "approved" && profile.status !== "active") {
     throw new AuthProblem(
       "Your vendor application is still awaiting approval.",
       403,
@@ -322,7 +322,7 @@ export async function requireAdmin() {
     );
   }
 
-  if (!profile || profile.role !== "admin") {
+  if (profile?.role !== "admin") {
     throw new AuthProblem(
       "Access denied. Administrators only.",
       403,

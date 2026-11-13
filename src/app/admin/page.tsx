@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   BarChart3,
   CheckSquare,
+  ClipboardCheck,
   ShieldCheck,
   ShoppingBag,
   Store,
@@ -17,38 +18,21 @@ export default async function AdminDashboardPage() {
 
   const admin = adminClient();
 
-  const { count: pendingApplications, error: applicationsError } =
-    await admin
-      .from("fernami_vendor_applications")
-      .select("user_id", {
-        count: "exact",
-        head: true,
-      })
-      .in("status", ["pending_review", "pending"]);
-
-  if (applicationsError) {
-    console.error(
-      "Pending applications count error:",
-      applicationsError.message,
-    );
+  const [totalVendorResult, approvedVendorResult, rejectedVendorResult, pendingVendorResult] = await Promise.all([
+    admin.from("profiles").select("id", { count: "exact", head: true }).eq("role", "vendor"),
+    admin.from("profiles").select("id", { count: "exact", head: true }).eq("role", "vendor").in("status", ["active", "approved"]),
+    admin.from("profiles").select("id", { count: "exact", head: true }).eq("role", "vendor").eq("status", "rejected"),
+    admin.from("profiles").select("id", { count: "exact", head: true }).eq("role", "vendor").in("status", ["pending", "pending_review"]),
+  ]);
+  const countErrors = [totalVendorResult.error, approvedVendorResult.error, rejectedVendorResult.error, pendingVendorResult.error].filter(Boolean);
+  if (countErrors.length) {
+    console.error("Vendor statistics query failed:", countErrors.map((item) => item?.message));
+    throw new Error("Vendor statistics could not be loaded. Please refresh the dashboard.");
   }
-
-  const { count: activeVendors, error: vendorsError } =
-    await admin
-      .from("profiles")
-      .select("id", {
-        count: "exact",
-        head: true,
-      })
-      .eq("role", "vendor")
-      .in("status", ["active", "approved"]);
-
-  if (vendorsError) {
-    console.error(
-      "Active vendors count error:",
-      vendorsError.message,
-    );
-  }
+  const totalVendors = totalVendorResult.count ?? 0;
+  const activeVendors = approvedVendorResult.count ?? 0;
+  const rejectedVendors = rejectedVendorResult.count ?? 0;
+  const pendingApplications = pendingVendorResult.count ?? 0;
 
   const { count: totalCustomers, error: customersError } =
     await admin
@@ -116,45 +100,15 @@ export default async function AdminDashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
-        <DashboardCard
-          href="/admin/vendor-applications"
-          title="Pending Vendor Applications"
-          value={pendingApplications ?? 0}
-          description="Review applications"
-          icon={<CheckSquare size={28} />}
-          iconClass="bg-green-100 text-green-600"
-          linkClass="text-green-700"
-        />
+        <DashboardCard href="/admin/vendor-applications" title="Total Vendors" value={totalVendors} description="View vendor accounts" icon={<Store size={28} />} iconClass="bg-blue-100 text-blue-600" linkClass="text-blue-700" />
+        <DashboardCard href="/admin/vendor-applications" title="Approved Vendors" value={activeVendors} description="Manage approved vendors" icon={<CheckSquare size={28} />} iconClass="bg-green-100 text-green-600" linkClass="text-green-700" />
+        <DashboardCard href="/admin/vendor-applications" title="Rejected Vendors" value={rejectedVendors} description="Review rejected applications" icon={<ShieldCheck size={28} />} iconClass="bg-red-100 text-red-600" linkClass="text-red-700" />
+        <DashboardCard href="/admin/vendor-applications" title="Pending Applications" value={pendingApplications} description="Review applications" icon={<ClipboardCheck size={28} />} iconClass="bg-orange-100 text-orange-600" linkClass="text-orange-700" />
+      </div>
 
-        <DashboardCard
-          href="/admin/vendor-applications"
-          title="Active Vendors"
-          value={activeVendors ?? 0}
-          description="Manage approved vendors"
-          icon={<Store size={28} />}
-          iconClass="bg-orange-100 text-orange-600"
-          linkClass="text-orange-700"
-        />
-
-        <DashboardCard
-          href="/admin/customers"
-          title="Customers"
-          value={totalCustomers ?? 0}
-          description="View customer accounts"
-          icon={<Users size={28} />}
-          iconClass="bg-purple-100 text-purple-600"
-          linkClass="text-purple-700"
-        />
-
-        <DashboardCard
-          href="/admin/orders"
-          title="Orders"
-          value={totalOrders ?? 0}
-          description="Monitor marketplace orders"
-          icon={<ShoppingBag size={28} />}
-          iconClass="bg-blue-100 text-blue-600"
-          linkClass="text-blue-700"
-        />
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <DashboardCard href="/admin/customers" title="Customers" value={totalCustomers ?? 0} description="View customer accounts" icon={<Users size={28} />} iconClass="bg-purple-100 text-purple-600" linkClass="text-purple-700" />
+        <DashboardCard href="/admin/orders" title="Orders" value={totalOrders ?? 0} description="Monitor marketplace orders" icon={<ShoppingBag size={28} />} iconClass="bg-blue-100 text-blue-600" linkClass="text-blue-700" />
       </div>
 
       <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -219,17 +173,9 @@ export default async function AdminDashboardPage() {
         </div>
 
         <div className="mt-5 grid grid-cols-1 gap-4 text-sm md:grid-cols-3">
-          <StatusItem
-            label="Applications awaiting review"
-            value={pendingApplications ?? 0}
-            tone="yellow"
-          />
-
-          <StatusItem
-            label="Active vendors"
-            value={activeVendors ?? 0}
-            tone="green"
-          />
+          <StatusItem label="Total vendors" value={totalVendors} tone="blue" />
+          <StatusItem label="Approved vendors" value={activeVendors} tone="green" />
+          <StatusItem label="Rejected vendors" value={rejectedVendors} tone="yellow" />
 
           <StatusItem
             label="Total orders"

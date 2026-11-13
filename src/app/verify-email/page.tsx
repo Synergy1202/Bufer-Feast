@@ -1,12 +1,11 @@
-import { EmailOtpVerification } from "@/components/email-otp-verification";
+import { redirect } from "next/navigation";
 
-type VerifyEmailPageProps = {
-  searchParams: Promise<{ type?: string; email?: string }>;
-};
+type VerifyEmailPageProps = { searchParams: Promise<{ type?: string; email?: string }> };
 
 export default async function VerifyEmailPage({ searchParams }: VerifyEmailPageProps) {
   const params = await searchParams;
-  const type = params.type === "vendor" ? "vendor" : "customer";
-  const email = typeof params.email === "string" ? params.email.trim().toLowerCase() : "";
-  return <EmailOtpVerification email={email} accountType={type} />;
+  const query = new URLSearchParams();
+  query.set("type", params.type === "vendor" ? "vendor" : "customer");
+  if (params.email) query.set("email", params.email);
+  redirect(`/check-email?${query.toString()}`);
 }

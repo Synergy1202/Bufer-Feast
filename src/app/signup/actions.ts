@@ -93,7 +93,7 @@ function getSupabasePublicClient() {
 function getSiteUrl() {
   return (
     process.env.NEXT_PUBLIC_SITE_URL ||
-    "http://localhost:3000"
+    "https://bufer-feast.vercel.app"
   );
 }
 
@@ -129,7 +129,7 @@ function getFileExtension(file: File) {
   return extension || "bin";
 }
 
-export async function registerVendor(formData: FormData) {
+async function registerVendorImpl(formData: FormData): Promise<string> {
   if (formData.get("commission_terms") !== "accepted") {
     throw new Error("You must accept the Bufer Feast commission terms.");
   }
@@ -347,12 +347,14 @@ export async function registerVendor(formData: FormData) {
       email,
       password,
       options: {
-        emailRedirectTo: `${getSiteUrl()}/auth/callback`,
+        emailRedirectTo: `${getSiteUrl()}/auth/confirm`,
         data: {
           full_name: fullName,
           business_name: businessName,
           phone,
           role: "vendor",
+          vendor_type: vendorType,
+          location,
         },
       },
     });
@@ -367,14 +369,18 @@ export async function registerVendor(formData: FormData) {
     );
   }
 
-  // Supabase may return an empty identities array for an existing email.
-  // Do not treat that response as a new signup or overwrite existing records.
-  if (authData.user.identities?.length === 0) {
-    throw new Error("An account with this email already exists. Please log in instead.");
-  }
-
-  const userId = authData.user.id;
   const admin = adminClient();
+  let signupUser = authData.user;
+  // Recover only an unconfirmed vendor account created by this flow.
+  if (signupUser.identities?.length === 0) {
+    const { data: lookup, error: lookupError } = await admin.auth.admin.getUserById(signupUser.id);
+    if (lookupError || !lookup.user || lookup.user.email?.toLowerCase() !== email ||
+        lookup.user.user_metadata?.role !== "vendor" || lookup.user.email_confirmed_at) {
+      throw new Error("An account with this email already exists. Please log in or contact support to recover the application.");
+    }
+    signupUser = lookup.user;
+  }
+  const userId = signupUser.id;
 
   const timestamp = Date.now();
 
@@ -456,7 +462,7 @@ export async function registerVendor(formData: FormData) {
 
     const { data: existingApplication, error: applicationLookupError } = await admin
       .from("fernami_vendor_applications")
-      .select("user_id")
+      .select("user_id,status,submitted_at,reapplication_count")
       .eq("user_id", userId)
       .maybeSingle();
 
@@ -464,7 +470,18 @@ export async function registerVendor(formData: FormData) {
       throw new Error(`Vendor application could not be checked: ${applicationLookupError.message}`);
     }
     if (existingApplication) {
-      throw new Error("A vendor application already exists for this account. Please contact support.");
+      if (!["pending_review", "pending"].includes(existingApplication.status || "")) {
+        throw new Error("A vendor application already exists for this account. Please log in to view its status.");
+      }
+      const { error: historyError } = await admin.from("fernami_vendor_application_history").upsert({
+        user_id: userId,
+        attempt_number: (existingApplication.reapplication_count || 0) + 1,
+        status: existingApplication.status,
+        snapshot: existingApplication,
+        submitted_at: existingApplication.submitted_at || new Date().toISOString(),
+      }, { onConflict: "user_id,attempt_number", ignoreDuplicates: true });
+      if (historyError) throw new Error("The existing vendor application history could not be recovered.");
+      return email;
     }
 
     const { error: applicationError } = await admin
@@ -508,28 +525,54 @@ export async function registerVendor(formData: FormData) {
         `Vendor application could not be created: ${applicationError.message}`,
       );
     }
-  } catch (error) {
-    await admin.storage
-      .from("vendor-documents")
-      .remove([idPath, cacPath]);
 
-    await admin
-      .from("profiles")
-      .delete()
-      .eq("id", userId);
-
-    await admin.auth.admin.deleteUser(userId);
-
-    if (error instanceof Error) {
-      throw error;
+    const { data: savedApplication, error: savedApplicationError } = await admin
+      .from("fernami_vendor_applications")
+      .select("*")
+      .eq("user_id", userId)
+      .single();
+    if (savedApplicationError || !savedApplication) {
+      throw new Error("The vendor application was saved but its history could not be initialized.");
     }
-
-    throw new Error(
-      "Vendor application could not be completed.",
-    );
+    const { error: historyError } = await admin.from("fernami_vendor_application_history").upsert({
+      user_id: userId,
+      attempt_number: (savedApplication.reapplication_count || 0) + 1,
+      status: savedApplication.status || "pending_review",
+      snapshot: savedApplication,
+      submitted_at: savedApplication.submitted_at || now,
+    }, { onConflict: "user_id,attempt_number", ignoreDuplicates: true });
+    if (historyError) throw new Error("Vendor application history could not be saved.");
+  } catch (error) {
+    // Preserve Auth and profile records so incomplete registrations can be recovered safely.
+    console.error("[vendor-signup] profile/application persistence failed", {
+      userId,
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
+    if (error instanceof Error) throw error;
+    throw new Error("Vendor application could not be completed. Please retry with the same email.");
   }
 
-  redirect(
-    `/verify-email?type=vendor&email=${encodeURIComponent(email)}`,
-  );
+  return email;
+}
+
+function safeVendorSignupMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  if (/Missing required fields|Please |must |You must /i.test(message)) return message;
+  if (/already exists|already registered|duplicate key/i.test(message)) return "A vendor account or application already exists for this email. Please log in to check its status.";
+  if (/rate limit|too many/i.test(message)) return "Too many confirmation emails have been requested. Please wait before trying again.";
+  if (/not configured|Missing Supabase/i.test(message)) return "Vendor registration is temporarily unavailable. Please contact support.";
+  return "We couldn't complete your vendor application. Your account may have been saved. Please retry with the same email or contact support.";
+}
+
+export async function registerVendor(formData: FormData) {
+  let email = "";
+  try {
+    email = await registerVendorImpl(formData);
+  } catch (error) {
+    console.error("[vendor-signup] registration failed", {
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
+    redirect(`/signup?error=${encodeURIComponent(safeVendorSignupMessage(error))}`);
+  }
+  redirect(`/check-email?type=vendor&email=${encodeURIComponent(email)}`);
 }
