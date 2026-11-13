@@ -39,7 +39,7 @@ export function EmailConfirmationPending({ email, accountType }: { email: string
         {accountType === "vendor" && <p className="mt-4 rounded-xl bg-orange-50 p-4 text-sm text-orange-900">Email confirmation does not approve a vendor application. Your application remains pending until an administrator reviews it.</p>}
         {message && <p role="status" className="mt-4 rounded-lg bg-green-50 p-3 text-sm text-green-700">{message}</p>}
         {error && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-        <button onClick={resend} disabled={busy || !email} className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-5 py-3 font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"><RefreshCw size={16} className={busy ? "animate-spin" : ""}/>{busy ? "Sending link..." : "Resend confirmation link"}</button>
+        <button type="button" onClick={resend} disabled={busy || !email} className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-5 py-3 font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"><RefreshCw size={16} className={busy ? "animate-spin" : ""}/>{busy ? "Sending link..." : "Resend confirmation link"}</button>
         <Link href="/login" className="mt-5 inline-block text-sm font-semibold text-orange-600">Back to login</Link>
       </section>
     </main>
