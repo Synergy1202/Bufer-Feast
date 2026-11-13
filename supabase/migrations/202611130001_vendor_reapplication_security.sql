@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS public.fernami_vendor_application_history (
   UNIQUE (user_id, attempt_number)
 );
 
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.fernami_vendor_applications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.fernami_vendor_application_history ENABLE ROW LEVEL SECURITY;
 CREATE INDEX IF NOT EXISTS fernami_vendor_application_history_user_idx
   ON public.fernami_vendor_application_history(user_id, attempt_number DESC);
@@ -45,9 +47,14 @@ SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
 BEGIN
-  IF COALESCE(auth.role(), '') <> 'service_role'
-     AND (NEW.role IS DISTINCT FROM OLD.role OR NEW.status IS DISTINCT FROM OLD.status) THEN
-    RAISE EXCEPTION 'Only authorized server operations may change profile role or status';
+  IF COALESCE(auth.role(), '') <> 'service_role' THEN
+    IF TG_OP = 'INSERT' THEN
+      IF NEW.role IS DISTINCT FROM 'customer' OR NEW.status IS DISTINCT FROM 'pending' THEN
+        RAISE EXCEPTION 'Only trusted server operations may create privileged or active profiles';
+      END IF;
+    ELSIF NEW.role IS DISTINCT FROM OLD.role OR NEW.status IS DISTINCT FROM OLD.status THEN
+      RAISE EXCEPTION 'Only authorized server operations may change profile role or status';
+    END IF;
   END IF;
   RETURN NEW;
 END;
@@ -55,7 +62,7 @@ $$;
 
 DROP TRIGGER IF EXISTS protect_profile_role_and_status ON public.profiles;
 CREATE TRIGGER protect_profile_role_and_status
-BEFORE UPDATE ON public.profiles
+BEFORE INSERT OR UPDATE ON public.profiles
 FOR EACH ROW EXECUTE FUNCTION public.protect_profile_role_and_status();
 
 CREATE OR REPLACE FUNCTION public.protect_vendor_application_review_fields()
@@ -65,18 +72,20 @@ SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
 BEGIN
-  IF COALESCE(auth.role(), '') <> 'service_role'
-     AND (
-       NEW.status IS DISTINCT FROM OLD.status OR
+  IF COALESCE(auth.role(), '') <> 'service_role' THEN
+    IF TG_OP = 'INSERT' THEN
+      RAISE EXCEPTION 'Vendor applications must be created through the trusted server workflow';
+    END IF;
+    IF NEW.status IS DISTINCT FROM OLD.status OR
        NEW.rejection_reason IS DISTINCT FROM OLD.rejection_reason OR
        NEW.reviewed_at IS DISTINCT FROM OLD.reviewed_at OR
        NEW.reviewed_by IS DISTINCT FROM OLD.reviewed_by OR
        NEW.reapplication_count IS DISTINCT FROM OLD.reapplication_count OR
        NEW.reapplication_allowed IS DISTINCT FROM OLD.reapplication_allowed OR
        NEW.next_reapplication_at IS DISTINCT FROM OLD.next_reapplication_at OR
-       NEW.rejection_email_status IS DISTINCT FROM OLD.rejection_email_status
-     ) THEN
-    RAISE EXCEPTION 'Only authorized administrators may change vendor application review fields';
+       NEW.rejection_email_status IS DISTINCT FROM OLD.rejection_email_status THEN
+      RAISE EXCEPTION 'Only authorized administrators may change vendor application review fields';
+    END IF;
   END IF;
   RETURN NEW;
 END;
@@ -84,7 +93,7 @@ $$;
 
 DROP TRIGGER IF EXISTS protect_vendor_application_review_fields ON public.fernami_vendor_applications;
 CREATE TRIGGER protect_vendor_application_review_fields
-BEFORE UPDATE ON public.fernami_vendor_applications
+BEFORE INSERT OR UPDATE ON public.fernami_vendor_applications
 FOR EACH ROW EXECUTE FUNCTION public.protect_vendor_application_review_fields();
 
 -- Reapplication is serialized by locking the one current application row.
