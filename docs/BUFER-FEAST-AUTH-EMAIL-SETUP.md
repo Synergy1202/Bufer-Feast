@@ -52,7 +52,7 @@ After changing Vercel environment variables, redeploy the testing project.
 
 Run `supabase/migrations/202611130001_vendor_reapplication_security.sql` in the testing Supabase SQL editor after reviewing it. It adds vendor application history and reapplication fields, a server-only reapplication function, and triggers that prevent authenticated clients from changing profile roles/statuses or vendor review fields.
 
-The migration preserves existing profiles and applications. It seeds a first history row for existing vendor applications.
+The migration preserves existing profiles and applications. It seeds a first history row for existing vendor applications. It does not replace the existing RLS policies on `profiles` or `fernami_vendor_applications`; those policies must be inspected in the testing Supabase project before sign-off. The new history table has RLS enabled with no client policies, and server-only triggers/functions protect privileged changes.
 
 ## Manual verification still required
 
