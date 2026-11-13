@@ -123,6 +123,11 @@ BEGIN
     RAISE EXCEPTION 'Invalid reapplication policy';
   END IF;
 
+  SELECT email_confirmed_at INTO v_email_confirmed_at FROM auth.users WHERE id = p_user_id;
+  IF v_email_confirmed_at IS NULL THEN
+    RAISE EXCEPTION 'The vendor must confirm the signup email before administrator review';
+  END IF;
+
   SELECT * INTO v_app
   FROM public.fernami_vendor_applications
   WHERE user_id = p_user_id
@@ -204,6 +209,7 @@ AS $
 DECLARE
   v_app public.fernami_vendor_applications%ROWTYPE;
   v_admin public.profiles%ROWTYPE;
+  v_email_confirmed_at timestamptz;
   v_now timestamptz := now();
   v_allowed boolean := false;
   v_next timestamptz := NULL;
