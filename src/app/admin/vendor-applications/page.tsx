@@ -9,6 +9,29 @@ import {
 
 export const dynamic = "force-dynamic";
 
+type VendorApplicationRow = {
+  user_id: string;
+  submitted_at: string | null;
+  status: string;
+  id_document_url: string | null;
+  cac_document_url: string | null;
+  business_name: string | null;
+  full_legal_name: string | null;
+  email: string | null;
+  phone: string | null;
+  category: string | null;
+  public_area: string | null;
+  public_address: string | null;
+  id_proof_type: string | null;
+  id_proof_number: string | null;
+  cac_number: string | null;
+  reviewed_at: string | null;
+  rejection_reason: string | null;
+  suspension_reason: string | null;
+  admin_notes: string | null;
+  rejection_email_status: string | null;
+};
+
 export default async function VendorApplicationsPage() {
   await requireAdmin();
 
@@ -24,6 +47,7 @@ export default async function VendorApplicationsPage() {
   if (error) {
     throw new Error(error.message);
   }
+  const applicationRows = (applications ?? []) as VendorApplicationRow[];
 
   return (
     <main className="mx-auto max-w-7xl space-y-8">
@@ -38,7 +62,7 @@ export default async function VendorApplicationsPage() {
         </p>
       </div>
 
-      {!applications || applications.length === 0 ? (
+      {applicationRows.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-gray-300 bg-white py-20 text-center">
           <h2 className="text-xl font-bold text-gray-900">
             No applications yet
@@ -50,7 +74,7 @@ export default async function VendorApplicationsPage() {
         </div>
       ) : (
         <div className="space-y-5">
-          {applications.map((application: any) => {
+          {applicationRows.map((application) => {
             const applicationKey = `${application.user_id}-${application.submitted_at}`;
 
             const isPending =
