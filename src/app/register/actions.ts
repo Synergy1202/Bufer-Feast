@@ -164,7 +164,7 @@ export async function registerCustomer(
       email,
       password,
       options: {
-        emailRedirectTo: siteUrl + "/auth/confirm",
+        emailRedirectTo: `${siteUrl}/auth/confirm`,
         data: {
           full_name: fullName,
           phone,
@@ -226,5 +226,5 @@ export async function registerCustomer(
     return { error: "We couldn't complete your registration. Please try again. If the problem continues, contact support." };
   }
 
-  redirect("/check-email?type=customer&email=" + encodeURIComponent(email));
+  redirect(`/check-email?type=customer&email=${encodeURIComponent(email)}`);
 }
