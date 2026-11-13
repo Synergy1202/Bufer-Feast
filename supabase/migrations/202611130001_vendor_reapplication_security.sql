@@ -27,7 +27,7 @@ RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, pg_temp
-AS $
+AS $$
 BEGIN
   IF COALESCE(auth.role(), '') IN ('authenticated', 'anon') THEN
     RAISE EXCEPTION 'Vendor application history is read-only to client sessions';
@@ -35,9 +35,10 @@ BEGIN
   IF TG_OP = 'DELETE' THEN
     RETURN OLD;
   END IF;
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
   RETURN NEW;
 END;
-$;
+$$;
 
 DROP TRIGGER IF EXISTS protect_vendor_application_history ON public.fernami_vendor_application_history;
 CREATE TRIGGER protect_vendor_application_history
@@ -115,6 +116,7 @@ BEGIN
       RAISE EXCEPTION 'Only authorized administrators may change vendor application review fields';
     END IF;
   END IF;
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
   RETURN NEW;
 END;
 $$;
@@ -227,7 +229,7 @@ RETURNS TABLE (
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, pg_temp
-AS $
+AS $$
 DECLARE
   v_app public.fernami_vendor_applications%ROWTYPE;
   v_admin public.profiles%ROWTYPE;
