@@ -463,7 +463,7 @@ async function registerVendorImpl(formData: FormData): Promise<string> {
 
     const { data: existingApplication, error: applicationLookupError } = await admin
       .from("fernami_vendor_applications")
-      .select("user_id")
+      .select("user_id,status,submitted_at,reapplication_count")
       .eq("user_id", userId)
       .maybeSingle();
 
@@ -471,7 +471,18 @@ async function registerVendorImpl(formData: FormData): Promise<string> {
       throw new Error(`Vendor application could not be checked: ${applicationLookupError.message}`);
     }
     if (existingApplication) {
-      throw new Error("A vendor application already exists for this account. Please contact support.");
+      if (!["pending_review", "pending"].includes(existingApplication.status || "")) {
+        throw new Error("A vendor application already exists for this account. Please log in to view its status.");
+      }
+      const { error: historyError } = await admin.from("fernami_vendor_application_history").upsert({
+        user_id: userId,
+        attempt_number: (existingApplication.reapplication_count || 0) + 1,
+        status: existingApplication.status,
+        snapshot: existingApplication,
+        submitted_at: existingApplication.submitted_at || new Date().toISOString(),
+      }, { onConflict: "user_id,attempt_number", ignoreDuplicates: true });
+      if (historyError) throw new Error("The existing vendor application history could not be recovered.");
+      return email;
     }
 
     const { error: applicationError } = await admin
@@ -515,6 +526,23 @@ async function registerVendorImpl(formData: FormData): Promise<string> {
         `Vendor application could not be created: ${applicationError.message}`,
       );
     }
+
+    const { data: savedApplication, error: savedApplicationError } = await admin
+      .from("fernami_vendor_applications")
+      .select("*")
+      .eq("user_id", userId)
+      .single();
+    if (savedApplicationError || !savedApplication) {
+      throw new Error("The vendor application was saved but its history could not be initialized.");
+    }
+    const { error: historyError } = await admin.from("fernami_vendor_application_history").upsert({
+      user_id: userId,
+      attempt_number: (savedApplication.reapplication_count || 0) + 1,
+      status: savedApplication.status || "pending_review",
+      snapshot: savedApplication,
+      submitted_at: savedApplication.submitted_at || now,
+    }, { onConflict: "user_id,attempt_number", ignoreDuplicates: true });
+    if (historyError) throw new Error("Vendor application history could not be saved.");
   } catch (error) {
     // Preserve Auth and profile records so incomplete registrations can be recovered safely.
     console.error("[vendor-signup] profile/application persistence failed", {
