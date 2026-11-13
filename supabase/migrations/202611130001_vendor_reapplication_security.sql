@@ -159,6 +159,9 @@ BEGIN
       rejection_reason = NULL,
       is_open = false
   WHERE id = p_user_id AND role = 'vendor';
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Vendor profile is missing';
+  END IF;
 
   INSERT INTO public.fernami_vendor_application_history
     (user_id, attempt_number, status, snapshot, submitted_at)
@@ -233,6 +236,9 @@ BEGIN
     SET role = 'vendor', status = 'active', is_open = false,
         rejection_reason = NULL, suspension_reason = NULL
     WHERE id = p_user_id AND role = 'vendor';
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'Vendor profile is missing';
+    END IF;
 
     UPDATE public.fernami_vendor_application_history
     SET status = 'approved', reviewed_at = v_now, reviewed_by = p_admin_id
@@ -255,6 +261,9 @@ BEGIN
     SET role = 'vendor', status = 'rejected', is_open = false,
         rejection_reason = btrim(p_reason), suspension_reason = NULL
     WHERE id = p_user_id AND role = 'vendor';
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'Vendor profile is missing';
+    END IF;
 
     UPDATE public.fernami_vendor_application_history
     SET status = 'rejected', reviewed_at = v_now, reviewed_by = p_admin_id,
