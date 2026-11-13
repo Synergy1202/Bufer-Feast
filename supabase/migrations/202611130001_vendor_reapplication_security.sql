@@ -49,7 +49,8 @@ AS $$
 BEGIN
   IF COALESCE(auth.role(), '') <> 'service_role' THEN
     IF TG_OP = 'INSERT' THEN
-      IF NEW.role IS DISTINCT FROM 'customer' OR NEW.status IS DISTINCT FROM 'pending' THEN
+      IF NEW.role IS DISTINCT FROM 'customer' OR
+         (NEW.status IS DISTINCT FROM 'pending' AND NEW.status IS DISTINCT FROM 'active') THEN
         RAISE EXCEPTION 'Only trusted server operations may create privileged or active profiles';
       END IF;
     ELSIF NEW.role IS DISTINCT FROM OLD.role OR NEW.status IS DISTINCT FROM OLD.status OR
