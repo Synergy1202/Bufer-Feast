@@ -12,6 +12,11 @@ function validateUserId(userId: string) {
   }
 }
 
+function policyNumber(value: string | undefined, fallback: number) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
 function cleanReason(reason: string) {
   const value = reason.trim();
 
@@ -79,8 +84,8 @@ export async function approveVendor(userId: string, note = ""): Promise<void> {
   if (adminUser.id === userId) throw new Error("You cannot approve your own vendor application.");
   const application = await getApplication(userId);
   const admin = adminClient();
-  const maxResubmissions = Math.max(0, Number.parseInt(process.env.VENDOR_MAX_RESUBMISSIONS || "2", 10) || 0);
-  const cooldownDays = Math.max(0, Number.parseInt(process.env.VENDOR_REAPPLICATION_COOLDOWN_DAYS || "7", 10) || 0);
+  const maxResubmissions = policyNumber(process.env.VENDOR_MAX_RESUBMISSIONS, 2);
+  const cooldownDays = policyNumber(process.env.VENDOR_REAPPLICATION_COOLDOWN_DAYS, 7);
   const { error } = await admin.rpc("review_vendor_application", {
     p_user_id: userId,
     p_admin_id: adminUser.id,
