@@ -362,10 +362,7 @@ export default async function VendorApplicationsPage() {
                         <p className="font-semibold">Application rejected</p>
                         <p>Rejection email: {application.rejection_email_status || "not_sent"}</p>
                         {application.rejection_email_status !== "sent" && (
-                          <form action={async () => {
-                            "use server";
-                            await retryVendorRejectionEmail(application.user_id);
-                          }}>
+                          <form action={retryVendorRejectionEmail.bind(null, application.user_id)}>
                             <button type="submit" className="w-full rounded-lg bg-red-700 px-3 py-2 font-semibold text-white hover:bg-red-800">Retry rejection email</button>
                           </form>
                         )}
