@@ -100,7 +100,7 @@ export default async function AdminDashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
-        <DashboardCard href="/admin/vendors" title="Total Vendors" value={totalVendors} description="View vendor accounts" icon={<Store size={28} />} iconClass="bg-blue-100 text-blue-600" linkClass="text-blue-700" />
+        <DashboardCard href="/admin/vendor-applications" title="Total Vendors" value={totalVendors} description="View vendor accounts" icon={<Store size={28} />} iconClass="bg-blue-100 text-blue-600" linkClass="text-blue-700" />
         <DashboardCard href="/admin/vendor-applications" title="Approved Vendors" value={activeVendors} description="Manage approved vendors" icon={<CheckSquare size={28} />} iconClass="bg-green-100 text-green-600" linkClass="text-green-700" />
         <DashboardCard href="/admin/vendor-applications" title="Rejected Vendors" value={rejectedVendors} description="Review rejected applications" icon={<ShieldCheck size={28} />} iconClass="bg-red-100 text-red-600" linkClass="text-red-700" />
         <DashboardCard href="/admin/vendor-applications" title="Pending Applications" value={pendingApplications} description="Review applications" icon={<ClipboardCheck size={28} />} iconClass="bg-orange-100 text-orange-600" linkClass="text-orange-700" />
