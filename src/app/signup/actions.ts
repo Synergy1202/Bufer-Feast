@@ -353,7 +353,6 @@ async function registerVendorImpl(formData: FormData): Promise<string> {
           business_name: businessName,
           phone,
           role: "vendor",
-          business_name: businessName,
           vendor_type: vendorType,
           location,
         },
