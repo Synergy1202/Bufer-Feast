@@ -3,6 +3,7 @@ import { adminClient } from "@/lib/server/admin";
 import {
   approveVendor,
   rejectVendor,
+  retryVendorRejectionEmail,
   suspendVendor,
 } from "./actions";
 
@@ -357,8 +358,17 @@ export default async function VendorApplicationsPage() {
                     )}
 
                     {application.status === "rejected" && (
-                      <div className="rounded-xl bg-red-50 p-4 text-center text-sm font-semibold text-red-700">
-                        Application rejected
+                      <div className="space-y-3 rounded-xl bg-red-50 p-4 text-sm text-red-800">
+                        <p className="font-semibold">Application rejected</p>
+                        <p>Rejection email: {application.rejection_email_status || "not_sent"}</p>
+                        {application.rejection_email_status !== "sent" && (
+                          <form action={async () => {
+                            "use server";
+                            await retryVendorRejectionEmail(application.user_id);
+                          }}>
+                            <button type="submit" className="w-full rounded-lg bg-red-700 px-3 py-2 font-semibold text-white hover:bg-red-800">Retry rejection email</button>
+                          </form>
+                        )}
                       </div>
                     )}
 
