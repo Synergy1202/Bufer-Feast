@@ -74,7 +74,7 @@ export async function loginAction(
   try {
     const result = await client.from("profiles")
       .select("id, role, status").eq("id", data.user.id).maybeSingle();
-    profile = result.data as typeof profile;
+    profile = result.data as { id: string; role: string; status: string } | null;
     profileError = result.error;
   } catch (reason) {
     console.error("[login] profile request failed", reason instanceof Error ? reason.message : "Unknown error");
