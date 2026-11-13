@@ -39,18 +39,35 @@ export async function POST(request: Request) {
       maxAge: 0,
     });
     if (error) throw safeAuthFailure(error, "confirm");
-    if (data.user) {
-      const admin = adminClient();
-      const { data: profile, error: lookupError } = await admin.from("profiles")
-        .select("role,status").eq("id", data.user.id).maybeSingle();
-      if (lookupError) throw lookupError;
-      if (profile?.role === "customer" && profile.status === "pending") {
-        const { error: statusError } = await admin.from("profiles")
-          .update({ status: "active" }).eq("id", data.user.id);
-        if (statusError) throw statusError;
-      }
+    if (!data.user) throw new AuthProblem("The confirmation link could not be matched to an account.", 400, "AUTH_CONFIRM_USER_MISSING");
+    const admin = adminClient();
+    const { data: profile, error: lookupError } = await admin.from("profiles")
+      .select("role,status,email").eq("id", data.user.id).maybeSingle();
+    if (lookupError) {
+      console.error("[auth-confirm] profile lookup failed", { code: lookupError.code, message: lookupError.message, userId: data.user.id });
+      throw new AuthProblem("Your account profile could not be loaded. Please contact support.", 503, "PROFILE_UNAVAILABLE");
     }
-    return reply({ ok: true, signedIn: !!data.session });
+    if (!profile || (profile.email && profile.email.toLowerCase() !== (data.user.email || "").toLowerCase())) {
+      throw new AuthProblem("Your account profile could not be matched to this verified email.", 403, "PROFILE_MISMATCH");
+    }
+    if (profile.role === "customer" && profile.status === "pending") {
+      const { error: statusError } = await admin.from("profiles")
+        .update({ status: "active" }).eq("id", data.user.id).eq("role", "customer").eq("status", "pending");
+      if (statusError) {
+        console.error("[auth-confirm] customer activation failed", { code: statusError.code, message: statusError.message, userId: data.user.id });
+        throw new AuthProblem("Your email is confirmed, but your account could not be activated. Please contact support.", 503, "PROFILE_ACTIVATION_FAILED");
+      }
+    } else if (profile.role === "vendor") {
+      const { data: application, error: applicationError } = await admin.from("fernami_vendor_applications")
+        .select("user_id,email,status").eq("user_id", data.user.id).maybeSingle();
+      if (applicationError || !application || (application.email || "").toLowerCase() !== (data.user.email || "").toLowerCase()) {
+        console.error("[auth-confirm] vendor application check failed", { code: applicationError?.code, message: applicationError?.message, userId: data.user.id });
+        throw new AuthProblem("Your vendor application could not be verified. Please contact support.", 503, "VENDOR_APPLICATION_UNAVAILABLE");
+      }
+    } else {
+      throw new AuthProblem("This account cannot use public email confirmation.", 403, "ACCOUNT_ROLE_INVALID");
+    }
+    return reply({ ok: true, signedIn: !!data.session, role: profile.role, status: profile.status });
   } catch (error) {
     return apiError(error);
   }
