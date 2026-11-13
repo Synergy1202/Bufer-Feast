@@ -22,6 +22,28 @@ CREATE TABLE IF NOT EXISTS public.fernami_vendor_application_history (
 );
 
 ALTER TABLE public.fernami_vendor_application_history ENABLE ROW LEVEL SECURITY;
+CREATE OR REPLACE FUNCTION public.protect_vendor_application_history()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $
+BEGIN
+  IF COALESCE(auth.role(), '') IN ('authenticated', 'anon') THEN
+    RAISE EXCEPTION 'Vendor application history is read-only to client sessions';
+  END IF;
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  END IF;
+  RETURN NEW;
+END;
+$;
+
+DROP TRIGGER IF EXISTS protect_vendor_application_history ON public.fernami_vendor_application_history;
+CREATE TRIGGER protect_vendor_application_history
+BEFORE INSERT OR UPDATE OR DELETE ON public.fernami_vendor_application_history
+FOR EACH ROW EXECUTE FUNCTION public.protect_vendor_application_history();
+
 CREATE INDEX IF NOT EXISTS fernami_vendor_application_history_user_idx
   ON public.fernami_vendor_application_history(user_id, attempt_number DESC);
 
@@ -74,10 +96,11 @@ SET search_path = public, pg_temp
 AS $$
 BEGIN
   IF COALESCE(auth.role(), '') IN ('authenticated', 'anon') THEN
-    IF TG_OP = 'INSERT' THEN
-      RAISE EXCEPTION 'Vendor applications must be created through the trusted server workflow';
+    IF TG_OP = 'INSERT' OR TG_OP = 'DELETE' THEN
+      RAISE EXCEPTION 'Vendor applications must be created or deleted through the trusted server workflow';
     END IF;
-    IF NEW.status IS DISTINCT FROM OLD.status OR
+    IF NEW.user_id IS DISTINCT FROM OLD.user_id OR
+       NEW.status IS DISTINCT FROM OLD.status OR
        NEW.rejection_reason IS DISTINCT FROM OLD.rejection_reason OR
        NEW.reviewed_at IS DISTINCT FROM OLD.reviewed_at OR
        NEW.reviewed_by IS DISTINCT FROM OLD.reviewed_by OR
@@ -98,7 +121,7 @@ $$;
 
 DROP TRIGGER IF EXISTS protect_vendor_application_review_fields ON public.fernami_vendor_applications;
 CREATE TRIGGER protect_vendor_application_review_fields
-BEFORE INSERT OR UPDATE ON public.fernami_vendor_applications
+BEFORE INSERT OR UPDATE OR DELETE ON public.fernami_vendor_applications
 FOR EACH ROW EXECUTE FUNCTION public.protect_vendor_application_review_fields();
 
 -- Reapplication is serialized by locking the one current application row.
