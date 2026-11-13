@@ -5,7 +5,7 @@ import { adminClient } from "@/lib/server/admin";
 export const runtime = "nodejs";
 
 function failure(url: URL, code: string) {
-  return NextResponse.redirect(new URL("/login?error=" + code, url.origin));
+  return NextResponse.redirect(new URL(`/login?error=${code}`, url.origin));
 }
 
 export async function GET(request: Request) {
