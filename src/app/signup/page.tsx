@@ -8,7 +8,9 @@ const inputClass =
 const labelClass =
   "mb-2 block text-sm font-semibold text-slate-700";
 
-export default function VendorSignupPage() {
+export default async function VendorSignupPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  const params = await searchParams;
+  const error = typeof params.error === "string" ? params.error : "";
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-10">
       <div className="mx-auto max-w-4xl">
@@ -26,6 +28,8 @@ export default function VendorSignupPage() {
             review.
           </p>
         </div>
+
+        {error && <p role="alert" className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-800">{error}</p>}
 
         <form
           action={registerVendor}
