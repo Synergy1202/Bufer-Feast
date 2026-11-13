@@ -6,28 +6,25 @@ import { MailCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { authChanged, useAuth } from "@/lib/auth-store";
 import { errorText, requestJson } from "@/lib/api-client";
+
 export function ConfirmEmail() {
-  const router = useRouter(),
-    auth = useAuth();
-  const [busy, setBusy] = useState(false),
-    [error, setError] = useState("");
+  const router = useRouter();
+  const auth = useAuth();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
   async function confirm() {
     setBusy(true);
     setError("");
     try {
-      const result = await requestJson<{ ok: boolean; signedIn?: boolean }>(
+      const result = await requestJson<{ ok: boolean; signedIn?: boolean; role?: string; status?: string }>(
         "/api/auth/confirm",
-        {
-          method: "POST",
-          bodyJSON: "{}",
-        },
+        { method: "POST", bodyJSON: "{}" },
       );
       const session = await authChanged();
-      router.replace(
-        result.signedIn === false || !session.user
-          ? "/login?confirmed=1"
-          : "/account",
-      );
+      if (result.signedIn === false || !session.user) router.replace("/login?confirmed=1");
+      else if (result.role === "vendor") router.replace(result.status === "approved" || result.status === "active" ? "/vendor/dashboard" : "/vendor/pending");
+      else router.replace("/account");
       router.refresh();
     } catch (reason) {
       setError(errorText(reason));
@@ -35,34 +32,18 @@ export function ConfirmEmail() {
       setBusy(false);
     }
   }
+
   return (
     <div className="shell page-space narrow-page">
-      <p className="eyebrow">ONE MORE STEP</p>
-      <h1 className="page-title">Confirm your email.</h1>
+      <p className="eyebrow">EMAIL CONFIRMATION</p>
+      <h1 className="page-title">Your email link is ready.</h1>
       <div className="auth-panel confirmation-panel">
         <MailCheck size={35} aria-hidden="true" />
-        <p>
-          Only continue if you requested this signup and opened the link from
-          your own email. Confirming will start that account’s session in this
-          browser.
-        </p>
-        {auth.user && (
-          <p className="setup-note">
-            You’re currently signed in as {auth.user.email}. This confirmation
-            may change the account in this browser.
-          </p>
-        )}
-        <Button size="lg" onClick={confirm} disabled={busy}>
-          {busy ? "Confirming…" : "Confirm email and sign in"}
-        </Button>
-        {error && (
-          <p className="error-panel" role="alert">
-            {error}
-          </p>
-        )}
-        <Link href="/login" className="text-link">
-          Return to log in
-        </Link>
+        <p>Only continue if you requested this signup and opened the link from your own email. This final step confirms the account and starts its session in this browser.</p>
+        {auth.user && <p className="setup-note">You’re currently signed in as {auth.user.email}. Confirming may change the account in this browser.</p>}
+        <Button size="lg" onClick={confirm} disabled={busy}>{busy ? "Confirming…" : "Confirm email and continue"}</Button>
+        {error && <p className="error-panel" role="alert">{error}</p>}
+        <Link href="/login" className="text-link">Return to log in</Link>
       </div>
     </div>
   );
