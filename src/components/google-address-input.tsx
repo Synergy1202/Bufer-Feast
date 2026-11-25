@@ -1,18 +1,5 @@
 "use client";
 
-// Delivery-address picker in the style of food-delivery apps:
-// 1. search with Google Places suggestions (or "Use my current location"),
-// 2. confirm on a map whose pin stays in the centre while the customer drags
-//    the map under it; the address updates from the pin position,
-// 3. add a house number / landmark.
-//
-// Uses the current Places API (New) and Geocoding through
-// @vis.gl/react-google-maps. The legacy google.maps.places.Autocomplete
-// widget is not available to Google Cloud projects created after March 2025.
-//
-// Form contract (unchanged from the previous version): when `name` is set the
-// component submits `name`, `name_latitude`, `name_longitude` and
-// `name_place_id`. Without a Maps key it falls back to a plain text input.
 
 import {
   APILoadingStatus,
@@ -41,7 +28,6 @@ import {
 } from "@/lib/delivery-location";
 
 export type PickedLocation = {
-  /** Full address as submitted, including any house number / landmark. */
   address: string;
   latitude: number;
   longitude: number;
@@ -51,7 +37,6 @@ export type PickedLocation = {
 type AddressInputProps = {
   value?: string;
   onChange?: (value: string) => void;
-  /** Called with coordinates once a location is chosen, and with null when the customer edits the text by hand. */
   onLocationChange?: (location: PickedLocation | null) => void;
   name?: string;
   id?: string;
@@ -59,21 +44,15 @@ type AddressInputProps = {
   placeholder?: string;
   className?: string;
   required?: boolean;
-  /** false = search box only (homepage hero). Its suggestion list is placed against the nearest `relative` ancestor, so wrap it in the full-width search bar. */
   showMap?: boolean;
-  /** Colours for the suggestion list and helper text. */
   tone?: "dark" | "light";
-  /** Remember the chosen place as this browser's delivery location. Off for kitchen (vendor) addresses. */
   rememberAsDeliveryLocation?: boolean;
-  /** A place already on file (a kitchen's pin): the map opens there and its coordinates are submitted unless changed. */
   initialLocation?: PickedLocation | null;
 };
 
 const MAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY;
 const LAGOS = { lat: 6.5244, lng: 3.3792 };
-// About 5 metres. Smaller camera drift than this is not a real move.
 const SAME_SPOT = 0.00005;
-// A leading Google plus code such as "G99R+M3H, " (plus its comma).
 const PLUS_CODE = /^[23456789CFGHJMPQRVWX]{4,8}\+[23456789CFGHJMPQRVWX]{2,3},?\s*/i;
 
 const TONES = {
@@ -104,15 +83,9 @@ type Suggestion = {
 };
 type Option = Suggestion | { kind: "current"; id: "current" };
 
-// Google calls window.gm_authFailure when it rejects the key (wrong key,
-// site not in the key's allowed list, API not enabled, billing off).
-// @vis.gl/react-google-maps 1.10 does not turn this into AUTH_FAILURE, so
-// watch it here and swap the broken map for a plain-text fallback.
 let mapsAuthFailed = false;
 const authFailureListeners = new Set<() => void>();
 
-// Installed when this module loads in the browser, before the Maps script
-// is requested, so an early rejection is never missed.
 if (typeof window !== "undefined") {
   const w = window as Window & { gm_authFailure?: () => void };
   const previous = w.gm_authFailure;
@@ -265,14 +238,11 @@ function AddressPicker({
   const [message, setMessage] = useState("");
   const [moving, setMoving] = useState(false);
   const [resolving, setResolving] = useState(false);
-  // How far off a "current location" fix may be; drawn as a circle on the map.
   const [accuracy, setAccuracy] = useState<{
     lat: number;
     lng: number;
     radius: number;
   } | null>(null);
-  // Start the map on the place already on file, else where this browser last
-  // delivered to, else central Lagos.
   const [start] = useState(() => {
     if (initialLocation) {
       return {
@@ -305,8 +275,6 @@ function AddressPicker({
     onLocationChangeRef.current = onLocationChange;
   }, [onChange, onLocationChange]);
 
-  // A parent that controls `value` (checkout) can reset the field. Ignore the
-  // echo of what this component just reported.
   useEffect(() => {
     if (value === undefined || value === lastEmitted.current) return;
     setQuery(value);
@@ -353,8 +321,6 @@ function AddressPicker({
         const { results } = await new geocoding.Geocoder().geocode({
           location: { lat, lng },
         });
-        // Riders can't use Google plus codes ("G99R+M3H, University Rd"), so
-        // prefer a result without one, else strip the code from the front.
         const best =
           results.find(
             (result) =>
@@ -375,7 +341,6 @@ function AddressPicker({
     [geocoding],
   );
 
-  // Fetch suggestions while the customer types (debounced).
   useEffect(() => {
     const text = query.trim();
     if (!places || !open || text.length < 3 || text === location?.address) {
@@ -429,7 +394,6 @@ function AddressPicker({
     try {
       const place = suggestion.prediction.toPlace();
       await place.fetchFields({ fields: ["formattedAddress", "location", "id"] });
-      // Fetching the place closes the billing session; the next search starts a new one.
       sessionToken.current = null;
       if (!place.location) throw new Error("No coordinates");
       choose(
@@ -485,10 +449,6 @@ function AddressPicker({
       zoomForAccuracy(metres),
     );
 
-    // Phones with GPS are usually within a few metres. Laptops and desktops
-    // have no GPS: the browser estimates from Wi-Fi or the internet
-    // connection, which can be kilometres off. Show how sure the fix is and
-    // ask the customer to correct the pin.
     if (metres > 50) {
       setAccuracy({ lat: latitude, lng: longitude, radius: metres });
       const range = metres >= 1000 ? `${(metres / 1000).toFixed(1)} km` : `${Math.round(metres / 10) * 10} m`;
@@ -514,7 +474,6 @@ function AddressPicker({
       event.preventDefault();
       setActive((index) => (index <= 0 ? options.length - 1 : index - 1));
     } else if (event.key === "Enter" && open && active >= 0) {
-      // Pick the highlighted suggestion instead of submitting the form.
       event.preventDefault();
       pick(options[active]);
     } else if (event.key === "Escape") {
@@ -522,8 +481,6 @@ function AddressPicker({
     }
   }
 
-  // The pin is fixed in the centre: whenever the map stops at a new spot
-  // because of the customer (drag, tap, zoom), look up the address there.
   async function handleIdle() {
     setMoving(false);
     const center = map?.getCenter();
@@ -568,9 +525,6 @@ function AddressPicker({
       : "Search above, or drag the map to your location";
 
   return (
-    // In search-only mode nothing here is `relative`, so the suggestion list
-    // lines up with the nearest positioned ancestor: the whole homepage search
-    // bar rather than the narrow input inside it (unreadable on phones).
     <div className={showMap ? "space-y-3" : "w-full"}>
       <div className={showMap ? "relative" : undefined}>
         <input
@@ -664,8 +618,6 @@ function AddressPicker({
       </div>
 
       {showMap && (
-        // Hidden rather than removed on failure: Google's script keeps
-        // references to the map element and throws if it disappears.
         <div className={apiFailed ? "hidden" : "space-y-3"}>
           <div className="relative h-64 w-full overflow-hidden rounded-xl bg-slate-200">
             <GoogleMap
@@ -698,7 +650,6 @@ function AddressPicker({
                 />
               )}
             </GoogleMap>
-            {/* Centre pin: its tip marks the delivery spot. */}
             <span
               aria-hidden="true"
               className="pointer-events-none absolute left-1/2 top-1/2 h-1.5 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/30"
@@ -737,8 +688,6 @@ function AddressPicker({
             Use my current location
           </button>
 
-          {/* Same address, second line: Google often stops at the street,
-              so this is where the door-level detail goes. */}
           {location && (
             <div className="space-y-1.5">
               <label
@@ -792,9 +741,6 @@ function AddressPicker({
   );
 }
 
-// Watch the position for a few seconds and keep the most accurate fix. The
-// first reading is often a rough network estimate that GPS improves on.
-// maximumAge 0: never reuse a cached (possibly old) position.
 function getBestPosition(): Promise<GeolocationPosition> {
   return new Promise((resolve, reject) => {
     let best: GeolocationPosition | null = null;
@@ -817,7 +763,6 @@ function getBestPosition(): Promise<GeolocationPosition> {
         if (position.coords.accuracy <= 30) finish();
       },
       (error) => {
-        // Keep waiting if a reading already arrived; fail only with nothing.
         if (best) return;
         navigator.geolocation.clearWatch(watchId);
         window.clearTimeout(timer);
@@ -828,7 +773,6 @@ function getBestPosition(): Promise<GeolocationPosition> {
   });
 }
 
-// Zoom out when the fix is rough, so a guess doesn't look like an exact door.
 function zoomForAccuracy(metres: number) {
   if (metres <= 50) return 18;
   if (metres <= 250) return 17;

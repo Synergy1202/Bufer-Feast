@@ -4,9 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type KitchenDistance = {
   vendorId: string;
-  /** Straight-line distance, rounded to 0.1 km by the database. */
   distanceKm: number;
-  /** Inside the kitchen's own delivery radius. */
   delivers: boolean;
 };
 
@@ -21,14 +19,6 @@ export function isCoordinate(latitude: unknown, longitude: unknown) {
   );
 }
 
-/**
- * Distances from a delivery point to approved kitchens, worked out in the
- * database (public.kitchen_distances) so kitchen coordinates never reach the
- * browser. Kitchens without a map pin are left out.
- *
- * Returns null when the lookup fails (for example the Phase 2 migration has
- * not been run yet), so callers can carry on without distances.
- */
 export async function getKitchenDistances(
   client: SupabaseClient,
   latitude: number,

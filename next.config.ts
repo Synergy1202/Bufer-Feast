@@ -20,10 +20,6 @@ const nextConfig = {
         source: "/:path*",
         headers: [
           { key: "X-Content-Type-Options", value: "nosniff" },
-          // Send only the site origin (never the path or query, so email-link
-          // tokens stay private) to other sites. Google Maps needs the origin
-          // to accept an API key restricted to buferfeast.com; "no-referrer"
-          // made it reject the key.
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
         ],
       },

@@ -70,8 +70,6 @@ export default function CheckoutPage() {
       setAddresses(list);
       setComplete(data.isComplete);
 
-      // Pre-select: the address just added, else keep the current choice,
-      // else the default / most recent one.
       const pick =
         (selectAddressText &&
           list.find((address) => address.address === selectAddressText)) ||
@@ -128,7 +126,6 @@ export default function CheckoutPage() {
   const selected = addresses.find((address) => address.id === selectedAddress);
   const basketVendorId = checkoutItems[0]?.vendor_id ?? "";
 
-  // Is the chosen address inside this kitchen's delivery area?
   const [area, setArea] = useState<{
     key: string;
     distanceKm: number;
@@ -146,7 +143,6 @@ export default function CheckoutPage() {
         if (!cancelled && result) setArea({ key: areaKey, ...result });
       })
       .catch(() => {
-        // The order is checked again on the server; a failed preview is fine.
       });
     return () => {
       cancelled = true;
@@ -163,8 +159,6 @@ export default function CheckoutPage() {
     data.set("label", newLabel);
     data.set("address", newAddress);
 
-    // Previously only the text was sent, so addresses saved here had no
-    // coordinates. saveAddress already reads these fields.
     if (newLocation) {
       data.set("address_latitude", String(newLocation.latitude));
       data.set("address_longitude", String(newLocation.longitude));
@@ -193,8 +187,6 @@ export default function CheckoutPage() {
   async function removeAddress(id: string) {
     try {
       await deleteAddress(id);
-      // Reloading re-selects: the deleted address is gone, so the first
-      // remaining one is chosen (or none if the list is empty).
       await loadCheckoutData();
     } catch (reason) {
       setError(
@@ -297,8 +289,6 @@ export default function CheckoutPage() {
           name="delivery_address"
           value={addressText}
         />
-        {/* The server reads this address's map pin itself, so a tampered
-            form can't fake being inside a kitchen's delivery area. */}
         <input
           type="hidden"
           name="saved_address_id"
@@ -414,9 +404,6 @@ export default function CheckoutPage() {
               </div>
             )}
 
-            {/* Map-first: the order goes to a saved address picked on the
-                map. Door-level detail goes in the address's landmark line;
-                anything else for the rider goes in special instructions. */}
             {selected ? (
               <p className="rounded-xl border border-[#333333] bg-[#1a1a1a] px-4 py-3 text-sm text-[#a0a0a0]">
                 <span className="font-bold text-white">Delivering to:</span>{" "}

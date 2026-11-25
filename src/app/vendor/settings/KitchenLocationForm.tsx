@@ -11,9 +11,7 @@ export function KitchenLocationForm({
   addressText,
   radiusKm,
 }: {
-  /** The kitchen's current pin, or null if it has never been placed. */
   location: PickedLocation | null;
-  /** The address text on file (shown even when there is no pin yet). */
   addressText: string;
   radiusKm: number | null;
 }) {
@@ -52,8 +50,6 @@ export function KitchenLocationForm({
             name="kitchen_location"
             tone="light"
             initialLocation={location}
-            // With no pin yet, start from the address text on file. (Passing
-            // a value alongside a pin would clear the pin.)
             value={location ? undefined : addressText}
             placeholder="Search for your kitchen's address"
             className="w-full px-4 py-3 bg-[#FDFBF7] border border-[#E7E5E4] rounded-xl focus:ring-2 focus:ring-[#84CC16] outline-none"

@@ -27,9 +27,6 @@ export async function GET(request: Request) {
       amountNaira: Number(order.total_price) + Number(order.delivery_fee || 0),
     });
 
-    // Customers can't edit orders, so the server key records the Paystack
-    // reference (limited to this customer's order, checked above). Payment
-    // confirmation finds the order by this reference.
     const { error: updateError } = await adminClient()
       .from("orders")
       .update({ payment_reference: payment.reference, payment_status: "pending" })

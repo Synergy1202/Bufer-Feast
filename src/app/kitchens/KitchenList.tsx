@@ -41,8 +41,6 @@ export function KitchenList({ kitchens }: { kitchens: KitchenSummary[] }) {
     });
   }, []);
 
-  // Start from where this browser last chose to deliver (homepage search,
-  // signup, saved addresses).
   useEffect(() => {
     const saved = readDeliveryLocation();
     if (saved) {
@@ -52,8 +50,6 @@ export function KitchenList({ kitchens }: { kitchens: KitchenSummary[] }) {
   }, [lookUp]);
 
   function handleLocation(picked: PickedLocation | null) {
-    // Typing a new search clears the pick; keep the last list until a new
-    // place is chosen.
     if (!picked) return;
     const next = {
       address: picked.address,
@@ -72,8 +68,6 @@ export function KitchenList({ kitchens }: { kitchens: KitchenSummary[] }) {
     }));
     if (!distances) return rows;
 
-    // Delivers to you (nearest first), then kitchens without a map pin yet,
-    // then kitchens that are too far (nearest first).
     const group = (row: Ranked) =>
       row.distance ? (row.distance.delivers ? 0 : 2) : 1;
     return rows
@@ -95,7 +89,6 @@ export function KitchenList({ kitchens }: { kitchens: KitchenSummary[] }) {
 
   return (
     <>
-      {/* Room below the bar for the search's own messages. */}
       <div className="mb-12">
         <p className="mb-2 flex items-center gap-2 text-sm font-medium text-[#a0a0a0]">
           <Navigation size={14} className="text-[#FF5500]" />

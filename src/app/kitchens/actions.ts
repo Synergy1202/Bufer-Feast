@@ -7,10 +7,6 @@ import {
   type KitchenDistance,
 } from "@/lib/server/kitchen-distance";
 
-/**
- * Called by the kitchens list with the customer's chosen delivery point.
- * Only distances come back, never where a kitchen is.
- */
 export async function kitchenDistancesFor(
   latitude: number,
   longitude: number,

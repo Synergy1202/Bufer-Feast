@@ -39,7 +39,6 @@ export default async function VendorSettingsPage({ searchParams }: { searchParam
         <p className="text-gray-500 mt-1 ml-11">Manage your vendor profile, preferences, and verification.</p>
       </div>
 
-      {/* Its own form: moving the pin is saved and logged separately. */}
       <KitchenLocationForm
         location={
           typeof profile?.location_latitude === "number" &&

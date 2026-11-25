@@ -1,7 +1,3 @@
-// The customer's most recently chosen delivery location, kept in this browser
-// only. It lets the homepage search, the map picker and (later) the kitchen
-// list start from the same place. It is a convenience, never a source of truth:
-// orders always use the address the customer confirms at checkout.
 
 export type DeliveryLocation = {
   address: string;
@@ -32,7 +28,6 @@ export function readDeliveryLocation(): DeliveryLocation | null {
     const parsed: unknown = JSON.parse(raw);
     return isValid(parsed) ? parsed : null;
   } catch {
-    // No window (server render), storage blocked, or bad JSON.
     return null;
   }
 }
@@ -41,6 +36,5 @@ export function saveDeliveryLocation(location: DeliveryLocation) {
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(location));
   } catch {
-    // Storage can be unavailable (private mode, blocked site data). Ignore.
   }
 }

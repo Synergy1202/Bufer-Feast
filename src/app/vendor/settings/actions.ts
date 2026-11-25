@@ -142,11 +142,6 @@ export type KitchenLocationState = {
   message: string;
 } | null;
 
-/**
- * Moves the kitchen's map pin and/or changes its delivery radius.
- * Every change is written to vendor_location_changes before the profile is
- * updated. The business name is never touched here.
- */
 export async function updateKitchenLocation(
   _previous: KitchenLocationState,
   formData: FormData,
@@ -235,7 +230,6 @@ export async function updateKitchenLocation(
     .eq("id", vendor.id);
 
   if (updateError) {
-    // Keep the log honest: remove the entry for a change that did not happen.
     await admin.from("vendor_location_changes").delete().eq("id", logRow.id);
     console.error("Kitchen location update error:", updateError.message);
     return { ok: false, message: "Your change could not be saved. Please try again." };

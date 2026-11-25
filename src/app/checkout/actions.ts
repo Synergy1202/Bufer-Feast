@@ -152,6 +152,18 @@ export async function placeOrderAction(formData: FormData) {
   const customer = await requireCustomer();
   const client = await authClient();
 
+  const { data: buyer } = await client
+    .from("profiles")
+    .select("role, status")
+    .eq("id", customer.id)
+    .maybeSingle();
+
+  if (buyer?.role !== "customer" || buyer.status !== "active") {
+    throw new Error(
+      "Only verified customer accounts can place orders.",
+    );
+  }
+
   const deliveryAddress = textValue(
     formData.get("delivery_address"),
   );
@@ -293,8 +305,6 @@ export async function placeOrderAction(formData: FormData) {
     );
   }
 
-  // Where the order goes, taken from the customer's own saved address (read
-  // under their login), never from coordinates sent by the browser.
   const savedAddressId = textValue(formData.get("saved_address_id"));
   let deliveryPoint: {
     latitude: number;
@@ -323,9 +333,6 @@ export async function placeOrderAction(formData: FormData) {
     }
   }
 
-  // Refuse orders outside the kitchen's delivery area. Skipped when the
-  // address has no map pin (older addresses) or the kitchen has no pin yet;
-  // the courier quote below still has to succeed for those.
   let deliveryDistanceKm: number | null = null;
 
   if (deliveryPoint) {
@@ -454,10 +461,12 @@ export async function placeOrderAction(formData: FormData) {
     };
   });
 
+  const admin = adminClient();
+
   const {
     data: order,
     error: orderError,
-  } = await client
+  } = await admin
     .from("orders")
     .insert({
       user_id: customer.id,
@@ -476,6 +485,12 @@ export async function placeOrderAction(formData: FormData) {
         : null,
       status: "pending",
       payment_status: "unpaid",
+      ...(deliveryPoint && {
+        delivery_latitude: deliveryPoint.latitude,
+        delivery_longitude: deliveryPoint.longitude,
+        delivery_place_id: deliveryPoint.placeId,
+        delivery_distance_km: deliveryDistanceKm,
+      }),
     })
     .select("id")
     .single();
@@ -489,7 +504,7 @@ export async function placeOrderAction(formData: FormData) {
 
   const {
     error: itemsError,
-  } = await client
+  } = await admin
     .from("order_items")
     .insert(
       orderItems.map((item) => ({
@@ -497,10 +512,6 @@ export async function placeOrderAction(formData: FormData) {
         order_id: order.id,
       })),
     );
-
-  // Customers can create orders but not edit or delete them, so the server
-  // key makes the follow-up changes, always limited to this customer's order.
-  const admin = adminClient();
 
   if (itemsError) {
     await admin
@@ -510,24 +521,6 @@ export async function placeOrderAction(formData: FormData) {
       .eq("user_id", customer.id);
 
     throw new Error(itemsError.message);
-  }
-
-  if (deliveryPoint) {
-    const { error: pointError } = await admin
-      .from("orders")
-      .update({
-        delivery_latitude: deliveryPoint.latitude,
-        delivery_longitude: deliveryPoint.longitude,
-        delivery_place_id: deliveryPoint.placeId,
-        delivery_distance_km: deliveryDistanceKm,
-      })
-      .eq("id", order.id)
-      .eq("user_id", customer.id);
-
-    // The pin is useful but not essential; never lose the order over it.
-    if (pointError) {
-      console.error("Could not save the order's delivery pin:", pointError.message);
-    }
   }
 
   const { data: customerProfile } = await client
@@ -603,12 +596,6 @@ export async function placeOrderAction(formData: FormData) {
 
   redirect(`/api/payments/initialize?order_id=${encodeURIComponent(order.id)}`);
 }
-/**
- * Lets the checkout page warn before the customer presses Place Order.
- * placeOrderAction repeats this check, so this is for the message only.
- * Returns null when there is nothing to check (no pin on the address or the
- * kitchen, or the lookup failed).
- */
 export async function checkDeliveryArea(
   savedAddressId: string,
   vendorId: string,

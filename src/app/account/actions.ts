@@ -84,8 +84,6 @@ export async function addAddress(
     throw new Error("Please enter a label and a full delivery address.");
   }
 
-  // Coordinates come from the map picker. Never trust them blindly: drop
-  // anything that is not a real latitude/longitude.
   const latitude = Number(location?.latitude);
   const longitude = Number(location?.longitude);
   const hasCoordinates =

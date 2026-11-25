@@ -36,9 +36,6 @@ export async function POST(request: Request) {
     if (error) throw new Error(error.message);
     if (!order) return NextResponse.json({ message: "Order not found." }, { status: 404 });
 
-    // The kitchen's phone is private, so read it with the server key. It goes
-    // to Shipbubble as the pickup contact and is never sent to the browser.
-    // (The order above was already checked to belong to this customer.)
     const { data: vendor, error: vendorError } = await adminClient()
       .from("profiles")
       .select("business_name, full_name, location, phone")
