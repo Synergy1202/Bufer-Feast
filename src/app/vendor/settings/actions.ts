@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireVendor } from "@/lib/server/auth";
 import { adminClient } from "@/lib/server/admin";
+import { DELIVERY_RADIUS_OPTIONS } from "@/lib/delivery-radius";
 
 const MAX_DOCUMENT_SIZE = 10 * 1024 * 1024;
 
@@ -134,4 +135,115 @@ export async function updateVendorSettings(formData: FormData) {
   revalidatePath(`/kitchens/${vendor.id}`);
 
   redirect("/vendor/settings?success=true");
+}
+
+export type KitchenLocationState = {
+  ok: boolean;
+  message: string;
+} | null;
+
+/**
+ * Moves the kitchen's map pin and/or changes its delivery radius.
+ * Every change is written to vendor_location_changes before the profile is
+ * updated. The business name is never touched here.
+ */
+export async function updateKitchenLocation(
+  _previous: KitchenLocationState,
+  formData: FormData,
+): Promise<KitchenLocationState> {
+  const vendor = await requireVendor();
+  const admin = adminClient();
+
+  const address = textValue(formData, "kitchen_location").slice(0, 500);
+  const latitude = Number(textValue(formData, "kitchen_location_latitude"));
+  const longitude = Number(textValue(formData, "kitchen_location_longitude"));
+  const placeId = textValue(formData, "kitchen_location_place_id").slice(0, 255);
+  const radius = Number(textValue(formData, "delivery_radius_km"));
+
+  if (address.length < 5) {
+    return { ok: false, message: "Enter your kitchen's full address." };
+  }
+
+  if (
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude) ||
+    Math.abs(latitude) > 90 ||
+    Math.abs(longitude) > 180 ||
+    (latitude === 0 && longitude === 0)
+  ) {
+    return {
+      ok: false,
+      message: "Choose your kitchen's address from the list or place the pin on the map.",
+    };
+  }
+
+  if (!(DELIVERY_RADIUS_OPTIONS as readonly number[]).includes(radius)) {
+    return { ok: false, message: "Choose a delivery distance from the list." };
+  }
+
+  const { data: current, error: readError } = await admin
+    .from("profiles")
+    .select("location, location_latitude, location_longitude, delivery_radius_km")
+    .eq("id", vendor.id)
+    .single();
+
+  if (readError || !current) {
+    return { ok: false, message: "Your kitchen details could not be loaded. Please try again." };
+  }
+
+  const unchanged =
+    current.location === address &&
+    current.location_latitude === latitude &&
+    current.location_longitude === longitude &&
+    current.delivery_radius_km === radius;
+
+  if (unchanged) {
+    return { ok: true, message: "Nothing to save: your location and delivery distance are unchanged." };
+  }
+
+  const { data: logRow, error: logError } = await admin
+    .from("vendor_location_changes")
+    .insert({
+      vendor_id: vendor.id,
+      changed_by: vendor.id,
+      old_location: current.location,
+      new_location: address,
+      old_latitude: current.location_latitude,
+      old_longitude: current.location_longitude,
+      new_latitude: latitude,
+      new_longitude: longitude,
+      old_radius_km: current.delivery_radius_km,
+      new_radius_km: radius,
+    })
+    .select("id")
+    .single();
+
+  if (logError || !logRow) {
+    console.error("Kitchen location log error:", logError?.message);
+    return { ok: false, message: "Your change could not be saved. Please try again." };
+  }
+
+  const { error: updateError } = await admin
+    .from("profiles")
+    .update({
+      location: address,
+      location_latitude: latitude,
+      location_longitude: longitude,
+      location_place_id: placeId || null,
+      delivery_radius_km: radius,
+    })
+    .eq("id", vendor.id);
+
+  if (updateError) {
+    // Keep the log honest: remove the entry for a change that did not happen.
+    await admin.from("vendor_location_changes").delete().eq("id", logRow.id);
+    console.error("Kitchen location update error:", updateError.message);
+    return { ok: false, message: "Your change could not be saved. Please try again." };
+  }
+
+  revalidatePath("/vendor/settings");
+  revalidatePath("/kitchens");
+  revalidatePath(`/kitchens/${vendor.id}`);
+
+  return { ok: true, message: "Kitchen location and delivery distance saved." };
 }

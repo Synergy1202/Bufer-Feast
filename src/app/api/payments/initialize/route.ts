@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { authClient, requireCustomer } from "@/lib/server/auth";
+import { adminClient } from "@/lib/server/admin";
 import { initializePaystackPayment } from "@/lib/server/paystack";
 
 export async function GET(request: Request) {
@@ -26,7 +27,10 @@ export async function GET(request: Request) {
       amountNaira: Number(order.total_price) + Number(order.delivery_fee || 0),
     });
 
-    const { error: updateError } = await client
+    // Customers can't edit orders, so the server key records the Paystack
+    // reference (limited to this customer's order, checked above). Payment
+    // confirmation finds the order by this reference.
+    const { error: updateError } = await adminClient()
       .from("orders")
       .update({ payment_reference: payment.reference, payment_status: "pending" })
       .eq("id", order.id)

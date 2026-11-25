@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -19,6 +19,7 @@ import {
   type PickedLocation,
 } from "@/components/google-address-input";
 import {
+  checkDeliveryArea,
   deleteAddress,
   getCheckoutData,
   placeOrderAction,
@@ -29,6 +30,9 @@ interface Address {
   id: string;
   label: string;
   address: string;
+  latitude: number | null;
+  longitude: number | null;
+  place_id: string | null;
 }
 
 export default function CheckoutPage() {
@@ -46,6 +50,7 @@ export default function CheckoutPage() {
 
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [selectedAddress, setSelectedAddress] = useState("");
+  const selectedAddressRef = useRef("");
   const [addressText, setAddressText] = useState("");
   const [allergies, setAllergies] = useState("");
   const [warning, setWarning] = useState("");
@@ -57,12 +62,26 @@ export default function CheckoutPage() {
   const [newLocation, setNewLocation] = useState<PickedLocation | null>(null);
   const [error, setError] = useState("");
 
-  async function loadCheckoutData() {
+  async function loadCheckoutData(selectAddressText?: string) {
     try {
       const data = await getCheckoutData();
+      const list = data.addresses as Address[];
 
-      setAddresses(data.addresses);
+      setAddresses(list);
       setComplete(data.isComplete);
+
+      // Pre-select: the address just added, else keep the current choice,
+      // else the default / most recent one.
+      const pick =
+        (selectAddressText &&
+          list.find((address) => address.address === selectAddressText)) ||
+        list.find((address) => address.id === selectedAddressRef.current) ||
+        list[0];
+      if (pick) selectAddress(pick);
+      else {
+        setSelectedAddress("");
+        setAddressText("");
+      }
     } catch (reason) {
       setError(
         reason instanceof Error
@@ -101,9 +120,38 @@ export default function CheckoutPage() {
   }
 
   function selectAddress(address: Address) {
+    selectedAddressRef.current = address.id;
     setSelectedAddress(address.id);
     setAddressText(address.address);
   }
+
+  const selected = addresses.find((address) => address.id === selectedAddress);
+  const basketVendorId = checkoutItems[0]?.vendor_id ?? "";
+
+  // Is the chosen address inside this kitchen's delivery area?
+  const [area, setArea] = useState<{
+    key: string;
+    distanceKm: number;
+    delivers: boolean;
+  } | null>(null);
+  const areaKey = `${selected?.id ?? ""}:${basketVendorId}`;
+  const currentArea = area?.key === areaKey ? area : null;
+  const tooFar = currentArea?.delivers === false;
+
+  useEffect(() => {
+    if (!selected?.id || !basketVendorId || selected.latitude === null) return;
+    let cancelled = false;
+    checkDeliveryArea(selected.id, basketVendorId)
+      .then((result) => {
+        if (!cancelled && result) setArea({ key: areaKey, ...result });
+      })
+      .catch(() => {
+        // The order is checked again on the server; a failed preview is fine.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selected?.id, selected?.latitude, basketVendorId, areaKey]);
 
   async function addNewAddress() {
     if (!newLabel.trim() || !newAddress.trim()) {
@@ -126,12 +174,13 @@ export default function CheckoutPage() {
     try {
       await saveAddress(data);
 
+      const savedText = newAddress.trim();
       setNewLabel("");
       setNewAddress("");
       setNewLocation(null);
       setShowAddressForm(false);
 
-      await loadCheckoutData();
+      await loadCheckoutData(savedText);
     } catch (reason) {
       setError(
         reason instanceof Error
@@ -144,12 +193,9 @@ export default function CheckoutPage() {
   async function removeAddress(id: string) {
     try {
       await deleteAddress(id);
+      // Reloading re-selects: the deleted address is gone, so the first
+      // remaining one is chosen (or none if the list is empty).
       await loadCheckoutData();
-
-      if (selectedAddress === id) {
-        setSelectedAddress("");
-        setAddressText("");
-      }
     } catch (reason) {
       setError(
         reason instanceof Error
@@ -229,6 +275,15 @@ export default function CheckoutPage() {
 
       <form
         action={placeOrderAction}
+        onSubmit={(event) => {
+          if (!addressText) {
+            event.preventDefault();
+            setError("Choose a delivery address, or add one with the map.");
+          } else if (tooFar) {
+            event.preventDefault();
+            setError("This kitchen doesn't deliver to the address you chose.");
+          }
+        }}
         className="grid grid-cols-1 gap-8 lg:grid-cols-3"
       >
         <input
@@ -241,6 +296,13 @@ export default function CheckoutPage() {
           type="hidden"
           name="delivery_address"
           value={addressText}
+        />
+        {/* The server reads this address's map pin itself, so a tampered
+            form can't fake being inside a kitchen's delivery area. */}
+        <input
+          type="hidden"
+          name="saved_address_id"
+          value={selected?.id ?? ""}
         />
 
         <div className="space-y-6 lg:col-span-2">
@@ -352,17 +414,38 @@ export default function CheckoutPage() {
               </div>
             )}
 
-            <textarea
-              value={addressText}
-              onChange={(event) => {
-                setAddressText(event.target.value);
-                setSelectedAddress("");
-              }}
-              required
-              placeholder="Or enter a delivery address manually"
-              rows={3}
-              className="w-full rounded-xl border border-[#333333] bg-[#1a1a1a] px-4 py-3 text-white placeholder-[#777]"
-            />
+            {/* Map-first: the order goes to a saved address picked on the
+                map. Door-level detail goes in the address's landmark line;
+                anything else for the rider goes in special instructions. */}
+            {selected ? (
+              <p className="rounded-xl border border-[#333333] bg-[#1a1a1a] px-4 py-3 text-sm text-[#a0a0a0]">
+                <span className="font-bold text-white">Delivering to:</span>{" "}
+                {selected.address}
+                {selected.latitude === null && (
+                  <span className="mt-2 block text-xs text-[#FF8A4C]">
+                    This address was saved before the map, so it has no pin.
+                    For accurate delivery, add it again with “Add New”.
+                  </span>
+                )}
+                {currentArea && (
+                  <span
+                    className={`mt-2 block text-xs ${
+                      tooFar ? "font-bold text-red-300" : "text-[#a0a0a0]"
+                    }`}
+                  >
+                    {tooFar
+                      ? `This kitchen doesn't deliver here: it's ${currentArea.distanceKm.toFixed(1)} km away, outside its delivery area. Choose another address or a closer kitchen.`
+                      : `${currentArea.distanceKm.toFixed(1)} km from the kitchen.`}
+                  </span>
+                )}
+              </p>
+            ) : (
+              <p className="rounded-xl border border-[#333333] bg-[#1a1a1a] px-4 py-3 text-sm text-[#a0a0a0]">
+                Choose a saved address above, or use{" "}
+                <span className="font-bold text-white">Add New</span> to find
+                yours on the map.
+              </p>
+            )}
           </section>
 
           {/* Delivery details */}
@@ -578,9 +661,10 @@ export default function CheckoutPage() {
 
           <button
             type="submit"
-            className="mt-6 w-full rounded-xl bg-[#FF5500] py-4 font-bold text-white hover:bg-[#e64d00]"
+            disabled={tooFar}
+            className="mt-6 w-full rounded-xl bg-[#FF5500] py-4 font-bold text-white hover:bg-[#e64d00] disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Place Order
+            {tooFar ? "Outside delivery area" : "Place Order"}
           </button>
         </aside>
       </form>

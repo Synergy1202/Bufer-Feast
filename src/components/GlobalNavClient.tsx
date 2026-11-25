@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
+import { isApprovedVendorStatus } from "@/lib/vendor-status";
 import { 
   BarChart3,
   ClipboardCheck,
@@ -42,10 +43,10 @@ export default function GlobalNavClient({
     role === "admin" && accountStatus === "active";
 
   const isApprovedVendor =
-    role === "vendor" && accountStatus === "approved";
+    role === "vendor" && isApprovedVendorStatus(accountStatus);
 
   const isPendingVendor =
-    role === "vendor" && accountStatus !== "approved";
+    role === "vendor" && !isApprovedVendorStatus(accountStatus);
 
   const mobileLinks = isAdmin
     ? [

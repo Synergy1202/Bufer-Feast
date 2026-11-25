@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { isApprovedVendorStatus } from "@/lib/vendor-status";
 
 const COOKIE_NAME = "jie_bulk_order-customer-auth";
 
@@ -117,7 +118,7 @@ response = NextResponse.next({
     }
 
     if (pathname === "/vendor/pending") {
-      if (profile.status === "approved") {
+      if (isApprovedVendorStatus(profile.status)) {
         const next = request.nextUrl.clone();
         next.pathname = "/vendor/dashboard";
         return NextResponse.redirect(next);
@@ -126,7 +127,7 @@ response = NextResponse.next({
       return response;
     }
 
-    if (profile.status !== "approved") {
+    if (!isApprovedVendorStatus(profile.status)) {
       const next = request.nextUrl.clone();
       next.pathname = "/vendor/pending";
       return NextResponse.redirect(next);

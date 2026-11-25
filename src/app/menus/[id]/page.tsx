@@ -13,10 +13,10 @@ export default async function MenuDetailPage({ params }: { params: Promise<{ id:
   let vendor = null;
   if (menu.vendor_id) {
     const { data: vendorData } = await client
-      .from("profiles")
+      .from("public_vendor_profiles")
       .select("full_name, business_name, location")
       .eq("id", menu.vendor_id)
-      .single();
+      .maybeSingle();
     vendor = vendorData;
   }
 

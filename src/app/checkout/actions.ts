@@ -4,6 +4,9 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { authClient, requireCustomer } from "@/lib/server/auth";
 import { requestShipbubbleRates, validateShipbubbleAddress } from "@/lib/server/shipbubble";
+import { getKitchenDistances, isCoordinate } from "@/lib/server/kitchen-distance";
+import { isApprovedVendorStatus } from "@/lib/vendor-status";
+import { adminClient } from "@/lib/server/admin";
 
 interface SubmittedCartItem {
   id?: string;
@@ -63,7 +66,7 @@ export async function getCheckoutData() {
       client
         .from("saved_addresses")
         .select(
-          "id, label, address, is_default, created_at",
+          "id, label, address, latitude, longitude, place_id, is_default, created_at",
         )
         .eq("user_id", customer.id)
         .order("is_default", {
@@ -278,7 +281,7 @@ export async function placeOrderAction(formData: FormData) {
     );
   }
 
-  if (vendor.status !== "active") {
+  if (!isApprovedVendorStatus(vendor.status)) {
     throw new Error(
       "This kitchen is not currently approved.",
     );
@@ -288,6 +291,61 @@ export async function placeOrderAction(formData: FormData) {
     throw new Error(
       "This kitchen is currently closed.",
     );
+  }
+
+  // Where the order goes, taken from the customer's own saved address (read
+  // under their login), never from coordinates sent by the browser.
+  const savedAddressId = textValue(formData.get("saved_address_id"));
+  let deliveryPoint: {
+    latitude: number;
+    longitude: number;
+    placeId: string | null;
+  } | null = null;
+
+  if (savedAddressId) {
+    const { data: savedAddress } = await client
+      .from("saved_addresses")
+      .select("address, latitude, longitude, place_id")
+      .eq("id", savedAddressId)
+      .eq("user_id", customer.id)
+      .maybeSingle();
+
+    if (
+      savedAddress &&
+      savedAddress.address === deliveryAddress &&
+      isCoordinate(savedAddress.latitude, savedAddress.longitude)
+    ) {
+      deliveryPoint = {
+        latitude: savedAddress.latitude,
+        longitude: savedAddress.longitude,
+        placeId: savedAddress.place_id || null,
+      };
+    }
+  }
+
+  // Refuse orders outside the kitchen's delivery area. Skipped when the
+  // address has no map pin (older addresses) or the kitchen has no pin yet;
+  // the courier quote below still has to succeed for those.
+  let deliveryDistanceKm: number | null = null;
+
+  if (deliveryPoint) {
+    const distances = await getKitchenDistances(
+      client,
+      deliveryPoint.latitude,
+      deliveryPoint.longitude,
+      vendorId,
+    );
+    const distance = distances?.[0];
+
+    if (distance) {
+      deliveryDistanceKm = distance.distanceKm;
+
+      if (!distance.delivers) {
+        throw new Error(
+          `This kitchen doesn't deliver to your address (${distance.distanceKm.toFixed(1)} km away). Choose a closer kitchen or another address.`,
+        );
+      }
+    }
   }
 
   const menuIds = cleanItems.map(
@@ -440,14 +498,36 @@ export async function placeOrderAction(formData: FormData) {
       })),
     );
 
+  // Customers can create orders but not edit or delete them, so the server
+  // key makes the follow-up changes, always limited to this customer's order.
+  const admin = adminClient();
+
   if (itemsError) {
-    await client
+    await admin
       .from("orders")
       .delete()
       .eq("id", order.id)
       .eq("user_id", customer.id);
 
     throw new Error(itemsError.message);
+  }
+
+  if (deliveryPoint) {
+    const { error: pointError } = await admin
+      .from("orders")
+      .update({
+        delivery_latitude: deliveryPoint.latitude,
+        delivery_longitude: deliveryPoint.longitude,
+        delivery_place_id: deliveryPoint.placeId,
+        delivery_distance_km: deliveryDistanceKm,
+      })
+      .eq("id", order.id)
+      .eq("user_id", customer.id);
+
+    // The pin is useful but not essential; never lose the order over it.
+    if (pointError) {
+      console.error("Could not save the order's delivery pin:", pointError.message);
+    }
   }
 
   const { data: customerProfile } = await client
@@ -500,7 +580,7 @@ export async function placeOrderAction(formData: FormData) {
   const selectedRate = rates.find((rate: { service_type?: string }) => rate.service_type === "pickup") || rates[0];
   if (!selectedRate) throw new Error("No Shipbubble delivery rate is available for this address.");
 
-  const { error: deliveryError } = await client
+  const { error: deliveryError } = await admin
     .from("orders")
     .update({
       delivery_provider: "shipbubble",
@@ -522,4 +602,42 @@ export async function placeOrderAction(formData: FormData) {
   revalidatePath("/admin/orders");
 
   redirect(`/api/payments/initialize?order_id=${encodeURIComponent(order.id)}`);
+}
+/**
+ * Lets the checkout page warn before the customer presses Place Order.
+ * placeOrderAction repeats this check, so this is for the message only.
+ * Returns null when there is nothing to check (no pin on the address or the
+ * kitchen, or the lookup failed).
+ */
+export async function checkDeliveryArea(
+  savedAddressId: string,
+  vendorId: string,
+): Promise<{ distanceKm: number; delivers: boolean } | null> {
+  const customer = await requireCustomer();
+  const client = await authClient();
+
+  if (!savedAddressId || !vendorId) return null;
+
+  const { data: savedAddress } = await client
+    .from("saved_addresses")
+    .select("latitude, longitude")
+    .eq("id", savedAddressId)
+    .eq("user_id", customer.id)
+    .maybeSingle();
+
+  if (!savedAddress || !isCoordinate(savedAddress.latitude, savedAddress.longitude)) {
+    return null;
+  }
+
+  const distances = await getKitchenDistances(
+    client,
+    savedAddress.latitude,
+    savedAddress.longitude,
+    vendorId,
+  );
+  const distance = distances?.[0];
+
+  return distance
+    ? { distanceKm: distance.distanceKm, delivers: distance.delivers }
+    : null;
 }

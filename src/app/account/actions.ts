@@ -69,12 +69,39 @@ export async function updatePhone(phone: string) {
   return { success: true };
 }
 
-export async function addAddress(label: string, address: string) {
+export async function addAddress(
+  label: string,
+  address: string,
+  location?: { latitude: number; longitude: number; placeId: string } | null,
+) {
   const supabase = await getSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) throw new Error("Not authenticated. Please log in again.");
 
-  const { error } = await supabase.from("saved_addresses").insert({ user_id: user.id, label, address });
+  const cleanLabel = String(label ?? "").trim().slice(0, 50);
+  const cleanAddress = String(address ?? "").trim().slice(0, 500);
+  if (!cleanLabel || cleanAddress.length < 5) {
+    throw new Error("Please enter a label and a full delivery address.");
+  }
+
+  // Coordinates come from the map picker. Never trust them blindly: drop
+  // anything that is not a real latitude/longitude.
+  const latitude = Number(location?.latitude);
+  const longitude = Number(location?.longitude);
+  const hasCoordinates =
+    Number.isFinite(latitude) &&
+    Number.isFinite(longitude) &&
+    Math.abs(latitude) <= 90 &&
+    Math.abs(longitude) <= 180;
+
+  const { error } = await supabase.from("saved_addresses").insert({
+    user_id: user.id,
+    label: cleanLabel,
+    address: cleanAddress,
+    latitude: hasCoordinates ? latitude : null,
+    longitude: hasCoordinates ? longitude : null,
+    place_id: hasCoordinates ? String(location?.placeId ?? "").slice(0, 255) || null : null,
+  });
   if (error) throw new Error(error.message);
   return { success: true };
 }

@@ -15,7 +15,11 @@ export default function HomePage() {
   const [vendors, setVendors] = useState<any[]>([]);
 
   useEffect(() => {
-    supabase.from("profiles").select("*").eq("role", "vendor").limit(4)
+    // Public kitchen details only (never the profiles table itself).
+    supabase
+      .from("public_vendor_profiles")
+      .select("id, business_name, full_name, vendor_type, location")
+      .limit(4)
       .then(({ data }) => {
         if (data) setVendors(data);
       });

@@ -65,6 +65,8 @@ type AddressInputProps = {
   tone?: "dark" | "light";
   /** Remember the chosen place as this browser's delivery location. Off for kitchen (vendor) addresses. */
   rememberAsDeliveryLocation?: boolean;
+  /** A place already on file (a kitchen's pin): the map opens there and its coordinates are submitted unless changed. */
+  initialLocation?: PickedLocation | null;
 };
 
 const MAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY;
@@ -232,6 +234,7 @@ function AddressPicker({
   showMap = true,
   tone = "dark",
   rememberAsDeliveryLocation = false,
+  initialLocation = null,
 }: AddressInputProps) {
   const theme = TONES[tone];
   const reactId = useId();
@@ -249,9 +252,13 @@ function AddressPicker({
     apiStatus === APILoadingStatus.FAILED ||
     apiStatus === APILoadingStatus.AUTH_FAILURE;
 
-  const [query, setQuery] = useState(value ?? "");
+  const [query, setQuery] = useState(
+    value ?? initialLocation?.address ?? "",
+  );
   const [details, setDetails] = useState("");
-  const [location, setLocation] = useState<PickedLocation | null>(null);
+  const [location, setLocation] = useState<PickedLocation | null>(
+    initialLocation,
+  );
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
@@ -264,8 +271,18 @@ function AddressPicker({
     lng: number;
     radius: number;
   } | null>(null);
-  // Start the map where this browser last delivered to, else central Lagos.
+  // Start the map on the place already on file, else where this browser last
+  // delivered to, else central Lagos.
   const [start] = useState(() => {
+    if (initialLocation) {
+      return {
+        center: {
+          lat: initialLocation.latitude,
+          lng: initialLocation.longitude,
+        },
+        zoom: 17,
+      };
+    }
     const saved = readDeliveryLocation();
     return saved
       ? { center: { lat: saved.latitude, lng: saved.longitude }, zoom: 15 }
@@ -281,7 +298,7 @@ function AddressPicker({
   const suggestSeq = useRef(0);
   const geocodeSeq = useRef(0);
   const userMovedMap = useRef(false);
-  const locationRef = useRef<PickedLocation | null>(null);
+  const locationRef = useRef<PickedLocation | null>(initialLocation);
 
   useEffect(() => {
     onChangeRef.current = onChange;

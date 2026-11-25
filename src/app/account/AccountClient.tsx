@@ -4,6 +4,7 @@ import { useState } from "react";
 import { User, Phone, MapPin, CheckCircle2, AlertCircle, X, Save, LogOut, ShoppingBag, Settings } from "lucide-react";
 import Link from "next/link";
 import { updatePhone, updateFullName, addAddress, deleteAddress, logoutUser } from "./actions";
+import { GoogleAddressInput, type PickedLocation } from "@/components/google-address-input";
 
 export default function AccountClient({ user, profile: initialProfile, addresses: initialAddresses }: any) {
   const [fullName, setFullName] = useState(initialProfile?.full_name === "User" ? "" : initialProfile?.full_name || "");
@@ -12,6 +13,7 @@ export default function AccountClient({ user, profile: initialProfile, addresses
   const [showAddressForm, setShowAddressForm] = useState(false);
   const [newAddressLabel, setNewAddressLabel] = useState("");
   const [newAddressValue, setNewAddressValue] = useState("");
+  const [newAddressLocation, setNewAddressLocation] = useState<PickedLocation | null>(null);
 
   const handleSaveName = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,7 +50,7 @@ export default function AccountClient({ user, profile: initialProfile, addresses
       return;
     }
     try {
-      await addAddress(newAddressLabel, newAddressValue);
+      await addAddress(newAddressLabel, newAddressValue, newAddressLocation);
       alert("Address saved successfully!");
       window.location.reload(); 
     } catch (err: any) {
@@ -171,7 +173,16 @@ export default function AccountClient({ user, profile: initialProfile, addresses
               {showAddressForm && (
                 <form onSubmit={handleAddAddress} className="mb-4 p-4 bg-[#1a1a1a] border border-[#333333] rounded-xl space-y-3">
                   <input type="text" placeholder="Label (e.g., Home, Office)" value={newAddressLabel} onChange={(e) => setNewAddressLabel(e.target.value)} className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#333333] rounded-lg text-sm outline-none focus:border-[#FF5500] text-white placeholder-[#666]" required />
-                  <textarea placeholder="Full address..." value={newAddressValue} onChange={(e) => setNewAddressValue(e.target.value)} className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#333333] rounded-lg text-sm outline-none focus:border-[#FF5500] text-white placeholder-[#666] resize-none" rows={2} required />
+                  <GoogleAddressInput
+                    value={newAddressValue}
+                    onChange={setNewAddressValue}
+                    onLocationChange={setNewAddressLocation}
+                    ariaLabel="Delivery address"
+                    placeholder="Search for your delivery address"
+                    required
+                    rememberAsDeliveryLocation
+                    className="w-full px-3 py-2 bg-[#0a0a0a] border border-[#333333] rounded-lg text-sm outline-none focus:border-[#FF5500] text-white placeholder-[#666]"
+                  />
                   <div className="flex gap-2">
                     <button type="submit" className="flex-1 px-4 py-2 bg-[#FF5500] text-white text-sm font-bold rounded-lg hover:bg-[#e64d00] transition-all">Save Address</button>
                     <button type="button" onClick={() => setShowAddressForm(false)} className="px-4 py-2 bg-[#2a2a2a] text-[#a0a0a0] text-sm font-bold rounded-lg hover:bg-[#333333] transition-all">Cancel</button>

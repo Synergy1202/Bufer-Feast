@@ -4,6 +4,7 @@ import { cookies, headers } from "next/headers";
 import type { AccountUser, AuthStatus } from "@/lib/types";
 import { canonicalSupabaseUrl } from "./supabase-url";
 import { AuthProblem } from "./problems";
+import { isApprovedVendorStatus } from "@/lib/vendor-status";
 
 const COOKIE_NAME = "jie_bulk_order-customer-auth";
 
@@ -279,7 +280,7 @@ export async function requireVendor() {
     );
   }
 
-  if (profile.status !== "approved") {
+  if (!isApprovedVendorStatus(profile.status)) {
     throw new AuthProblem(
       "Your vendor application is still awaiting approval.",
       403,

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { authClient, requireCustomer } from "@/lib/server/auth";
+import { adminClient } from "@/lib/server/admin";
 import { requestShipbubbleRates, validateShipbubbleAddress } from "@/lib/server/shipbubble";
 
 function nextPickupDate() {
@@ -35,17 +36,21 @@ export async function POST(request: Request) {
     if (error) throw new Error(error.message);
     if (!order) return NextResponse.json({ message: "Order not found." }, { status: 404 });
 
-    const { data: vendor, error: vendorError } = await client
-      .from("public_vendor_profiles")
-      .select("display_name, location, phone, email")
+    // The kitchen's phone is private, so read it with the server key. It goes
+    // to Shipbubble as the pickup contact and is never sent to the browser.
+    // (The order above was already checked to belong to this customer.)
+    const { data: vendor, error: vendorError } = await adminClient()
+      .from("profiles")
+      .select("business_name, full_name, location, phone")
       .eq("id", order.vendor_id)
+      .eq("role", "vendor")
       .maybeSingle();
     if (vendorError) throw new Error(vendorError.message);
     if (!vendor?.location) return NextResponse.json({ message: "The kitchen pickup address is not configured." }, { status: 422 });
 
     const [sender, receiver] = await Promise.all([
       validateShipbubbleAddress({
-        name: vendor.display_name || "Bufer Feast kitchen",
+        name: vendor.business_name || vendor.full_name || "Bufer Feast kitchen",
         email: customer.email,
         phone: vendor.phone || body.deliveryPhone,
         address: vendor.location,

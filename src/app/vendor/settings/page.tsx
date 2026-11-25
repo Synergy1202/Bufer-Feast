@@ -1,6 +1,7 @@
 import { requireVendor, authClient } from "@/lib/server/auth";
 import Link from "next/link";
 import { updateVendorSettings } from "./actions";
+import { KitchenLocationForm } from "./KitchenLocationForm";
 import { 
   Settings, Lock, MessageCircle, Phone, Bell, Shield, 
   CheckCircle, FileText, Clock 
@@ -38,6 +39,23 @@ export default async function VendorSettingsPage({ searchParams }: { searchParam
         <p className="text-gray-500 mt-1 ml-11">Manage your vendor profile, preferences, and verification.</p>
       </div>
 
+      {/* Its own form: moving the pin is saved and logged separately. */}
+      <KitchenLocationForm
+        location={
+          typeof profile?.location_latitude === "number" &&
+          typeof profile?.location_longitude === "number"
+            ? {
+                address: profile.location || "",
+                latitude: profile.location_latitude,
+                longitude: profile.location_longitude,
+                placeId: profile.location_place_id || "",
+              }
+            : null
+        }
+        addressText={profile?.location || ""}
+        radiusKm={profile?.delivery_radius_km ?? null}
+      />
+
       {/* encType is required for file uploads */}
 <form action={updateVendorSettings} className="space-y-8">        
         {/* Section 1: Business Identity (LOCKED) */}
@@ -53,19 +71,13 @@ export default async function VendorSettingsPage({ searchParams }: { searchParam
               </label>
               <input type="text" value={profile?.business_name || "Not set"} readOnly className="w-full px-4 py-3 bg-[#F5F5F4] border border-[#E7E5E4] rounded-xl text-gray-500 cursor-not-allowed outline-none" />
             </div>
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-2">
-                Location / Address <Lock size={12} className="text-gray-400" />
-              </label>
-              <input type="text" value={profile?.location || "Not set"} readOnly className="w-full px-4 py-3 bg-[#F5F5F4] border border-[#E7E5E4] rounded-xl text-gray-500 cursor-not-allowed outline-none" />
-            </div>
           </div>
           <div className="mt-6 p-4 bg-[#FFF7ED] border border-[#EA580C]/20 rounded-xl flex items-start gap-3">
             <MessageCircle size={20} className="text-[#EA580C] shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-bold text-[#1C1917]">Need to change your Business Name or Location?</p>
+              <p className="text-sm font-bold text-[#1C1917]">Need to change your Business Name?</p>
               <p className="text-xs text-gray-600 mt-1">
-                To protect your brand identity, these details cannot be changed automatically. 
+                To protect your brand identity, your business name cannot be changed automatically. 
                 <Link href="/support" className="text-[#EA580C] font-bold underline ml-1 hover:text-[#C2410C]">Contact Support</Link> to request a manual update.
               </p>
             </div>
