@@ -7,4 +7,5 @@
 .env*
 !.env.example
 GOOGLE-MAPS-SETUP.md
+PENDING-WORK.md
 *.log
