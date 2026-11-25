@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { GoogleAddressInput } from "@/components/google-address-input";
 import Link from "next/link";
 import { 
   ChefHat, MapPin, Star, ArrowRight, Search, 
@@ -99,7 +100,13 @@ export default function HomePage() {
           <div className="relative flex items-center bg-[#111111] rounded-xl border border-[#333] p-2 shadow-2xl">
             <div className="flex-1 flex items-center gap-3 px-4 py-3 bg-[#1a1a1a] rounded-lg text-white">
               <MapPin className="text-[#FF5500] shrink-0" size={20} />
-              <input type="text" placeholder="Delivery address..." className="w-full outline-none bg-transparent placeholder-[#777]" />
+              <GoogleAddressInput
+                showMap={false}
+                rememberAsDeliveryLocation
+                ariaLabel="Delivery address"
+                placeholder="Delivery address..."
+                className="w-full outline-none bg-transparent placeholder-[#777]"
+              />
             </div>
             <Link href="/kitchens" className="bg-[#FF5500] hover:bg-[#e64d00] text-white font-bold py-3 px-8 rounded-lg transition-all flex items-center justify-center gap-2 ml-2">
               Find Food <ArrowRight size={18} />

@@ -6,4 +6,5 @@
 *.tsbuildinfo
 .env*
 !.env.example
+GOOGLE-MAPS-SETUP.md
 *.log

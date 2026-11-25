@@ -14,7 +14,10 @@ import {
   Building2,
 } from "lucide-react";
 import { useCart } from "@/context/cart-context";
-import { GoogleAddressInput } from "@/components/google-address-input";
+import {
+  GoogleAddressInput,
+  type PickedLocation,
+} from "@/components/google-address-input";
 import {
   deleteAddress,
   getCheckoutData,
@@ -51,6 +54,7 @@ export default function CheckoutPage() {
   const [showAddressForm, setShowAddressForm] = useState(false);
   const [newLabel, setNewLabel] = useState("");
   const [newAddress, setNewAddress] = useState("");
+  const [newLocation, setNewLocation] = useState<PickedLocation | null>(null);
   const [error, setError] = useState("");
 
   async function loadCheckoutData() {
@@ -111,11 +115,20 @@ export default function CheckoutPage() {
     data.set("label", newLabel);
     data.set("address", newAddress);
 
+    // Previously only the text was sent, so addresses saved here had no
+    // coordinates. saveAddress already reads these fields.
+    if (newLocation) {
+      data.set("address_latitude", String(newLocation.latitude));
+      data.set("address_longitude", String(newLocation.longitude));
+      data.set("address_place_id", newLocation.placeId);
+    }
+
     try {
       await saveAddress(data);
 
       setNewLabel("");
       setNewAddress("");
+      setNewLocation(null);
       setShowAddressForm(false);
 
       await loadCheckoutData();
@@ -322,6 +335,9 @@ export default function CheckoutPage() {
                 <GoogleAddressInput
                   value={newAddress}
                   onChange={setNewAddress}
+                  onLocationChange={setNewLocation}
+                  ariaLabel="New delivery address"
+                  rememberAsDeliveryLocation
                   placeholder="Search for a full delivery address"
                   className="w-full rounded-lg border border-[#333333] bg-[#0a0a0a] px-3 py-3 text-white placeholder-[#777]"
                 />

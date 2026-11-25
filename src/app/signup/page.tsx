@@ -172,7 +172,9 @@ export default function VendorSignupPage() {
                 </label>
 
                 <GoogleAddressInput
+                  id="location"
                   name="location"
+                  tone="light"
                   placeholder="Search for the full kitchen address"
                   className={inputClass}
                 />

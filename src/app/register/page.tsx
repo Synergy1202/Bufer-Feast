@@ -86,7 +86,7 @@ export default function CustomerSignupPage() {
             <div className="space-y-1">
               <label className="text-xs font-bold text-[#a0a0a0] uppercase">Home / Office / Event Venue</label>
               <div className="relative">
-                <GoogleAddressInput name="primary_address" className="w-full px-4 py-3 bg-[#1a1a1a] border border-[#333333] rounded-xl text-white placeholder-[#666]" placeholder="Search your delivery address" />
+                <GoogleAddressInput name="primary_address" ariaLabel="Primary delivery address" rememberAsDeliveryLocation className="w-full px-4 py-3 bg-[#1a1a1a] border border-[#333333] rounded-xl text-white placeholder-[#666]" placeholder="Search your delivery address" />
                 <MapPin size={16} className="absolute left-3 top-4 text-[#666]" />
               </div>
               <p className="text-xs text-[#a0a0a0] mt-1">You can add more saved addresses in your profile later.</p>
